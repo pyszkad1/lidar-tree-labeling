@@ -8,12 +8,6 @@ DATA_WIDTH = 1000
 DATA_HEIGHT = 128
 Y_STRETCH = 4
 
-import sys
-import numpy as np
-from PyQt5.QtWidgets import QApplication, QMainWindow, QGraphicsScene, QGraphicsView, QWidget, QVBoxLayout
-from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QColor
-from PyQt5.QtCore import Qt, QPoint
-
 
 class DrawableGraphicsScene(QGraphicsScene):
     def __init__(self, width, height, parent=None):
