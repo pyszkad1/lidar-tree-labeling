@@ -1,3 +1,4 @@
+import os
 import sys
 from image_transformation import *
 import numpy as np
@@ -25,7 +26,7 @@ class DrawableGraphicsScene(QGraphicsScene):
         self.image_width = width
         self.image_width_height = height
         self.backgroundImage = QImage(width, height, QImage.Format_RGB32)
-        self.backgroundImage.fill(Qt.red)
+        self.backgroundImage.fill(Qt.transparent)
         self.maskImage = QImage(width, height, QImage.Format_ARGB32)
         self.maskImage.fill(Qt.transparent)
         self.isDrawing = False
@@ -52,6 +53,7 @@ class DrawableGraphicsScene(QGraphicsScene):
                 #     rgb_array = self.convertArrayToRGB(array)
                 rgb_array = transform_file(file_name)
                 self.setBackgroundImageFromArray(rgb_array)
+                self.adjustCanvasSize(rgb_array.shape[1], rgb_array.shape[0])
             except Exception as e:
                 print("Error:", e)
 
@@ -155,7 +157,7 @@ class Window(QMainWindow):
         self.image_height = height
 
         # Set main window properties
-        self.setWindowTitle("Adams Labeler")
+        self.setWindowTitle("Labeler")
         self.setGeometry(100, 100, width + 20 , height + 120)  # window size
 
         # Create a widget to hold everything
@@ -183,6 +185,10 @@ class Window(QMainWindow):
         self.button3 = QPushButton("Draw")
         self.button4 = QPushButton("Erase")
         self.open_button = QPushButton("Open File")
+
+        self.save_button = QPushButton("Save")
+        self.save_button.clicked.connect(self.saveImageAndMask)
+        self.buttons_layout.addWidget(self.save_button)
 
         # Make buttons square
         button_size = 100  # Define a fixed size for buttons
@@ -247,9 +253,68 @@ class Window(QMainWindow):
         self.resetButtonStyles()
         self.setActiveButtonStyle(self.button4)
 
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_S and (event.modifiers() & Qt.ControlModifier):
+            self.saveImageAndMask()
+
+    def saveImageAndMask(self):
+        options = QFileDialog.Options()
+        # Use a base file name for both saves. Strip extension if user provides one.
+        fileName, _ = QFileDialog.getSaveFileName(self, "Save Files", "",
+                                                  "All Files (*)", options=options)
+        if fileName:
+            baseFileName, _ = os.path.splitext(fileName)  # Removes extension if present
+
+            try:
+                # Combine backgroundImage and maskImage
+                combinedImage = self.combineImages(self.scene.backgroundImage, self.scene.maskImage)
+
+                # Save the combined image
+                combinedImageFileName = f"{baseFileName}.png"
+                combinedImage.save(combinedImageFileName)
+                print("Combined image saved successfully:", combinedImageFileName)
+
+                # Convert maskImage to binary mask and save
+                binaryMask = self.convertToBinaryMask(self.scene.maskImage)
+                binaryMaskFileName = f"{baseFileName}.bin"
+                np.save(binaryMaskFileName, binaryMask)
+                print("Binary mask saved successfully:", binaryMaskFileName)
+
+            except Exception as e:
+                print("Failed to save files:", e)
+
+    def convertToBinaryMask(self, maskImage):
+        # Assuming maskImage is a QImage, convert it to a numpy array first
+        ptr = maskImage.bits()
+        ptr.setsize(maskImage.byteCount())
+        arr = np.array(ptr).reshape(maskImage.height(), maskImage.width(), 4)  # 4 for RGBA
+
+        # Define yellow in RGBA (adjust the values to match your exact yellow)
+        yellow = np.array([255, 255, 0, 255], dtype=np.uint8)
+
+        # Create a binary mask: 1 where the pixel is yellow, 0 elsewhere
+        binaryMask = np.all(arr[:, :, :4] == yellow, axis=-1).astype(int)
+
+        return binaryMask
+
+    def combineImages(self, backgroundImage, maskImage):
+        # Convert QImage to QPixmap to use QPainter
+        backgroundPixmap = QPixmap.fromImage(backgroundImage)
+        maskPixmap = QPixmap.fromImage(maskImage)
+
+        # Create QPainter to draw the mask on top of the background
+        painter = QPainter(backgroundPixmap)
+        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)  # Ensure mask overlays background
+        painter.drawPixmap(backgroundPixmap.rect(), maskPixmap)
+        painter.end()
+
+        # Convert back to QImage to save
+        combinedImage = backgroundPixmap.toImage()
+        return combinedImage
+
 def main():
     app = QApplication(sys.argv)
-    window = Window(DATA_WIDTH, DATA_HEIGHT*Y_STRETCH)
+    window = Window(DATA_WIDTH, DATA_HEIGHT)
     window.show()
     sys.exit(app.exec_())
 
