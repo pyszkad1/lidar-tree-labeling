@@ -131,7 +131,7 @@ class MainWindow(QMainWindow):
         # saved as 2d array
         binary_mask = np.any(arr != 0, axis=-1).astype(int)[..., np.newaxis].squeeze()
 
-        return binary_mask  # pindík
+        return binary_mask
 
     def combine_images(self, background_pixmap: QPixmap, mask_pixmap: QPixmap):
         painter = QPainter(background_pixmap)
@@ -143,3 +143,5 @@ class MainWindow(QMainWindow):
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_S and (event.modifiers() & Qt.ControlModifier):
             self.save_files()
+        if event.key() == Qt.Key_Z and (event.modifiers() & Qt.ControlModifier):
+            self.labeler.scene.undoMaskState()
