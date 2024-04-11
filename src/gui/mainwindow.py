@@ -84,7 +84,7 @@ class MainWindow(QMainWindow):
             return
         try:
             mask_array = np.load(filename, allow_pickle=True)
-            self.labeler.set_mask_image(mask_array)
+            self.labeler.scene.set_mask_image(mask_array)
         except Exception as e:
             print("Error:", e)
 
@@ -101,7 +101,7 @@ class MainWindow(QMainWindow):
             mask_map = self.labeler.get_drawn_mask()
             background_image = self.labeler.get_image_qpixmap()
 
-            combined_image = self.combine_images(mask_map, background_image)
+            combined_image = self.combine_images(background_image, mask_map)
 
             # Save the combined image
             combined_image_filename = f"{base_filename}.png"
@@ -145,3 +145,5 @@ class MainWindow(QMainWindow):
             self.save_files()
         if event.key() == Qt.Key_Z and (event.modifiers() & Qt.ControlModifier):
             self.labeler.scene.undoMaskState()
+        if event.key() == Qt.Key_Y and (event.modifiers() & Qt.ControlModifier):
+            self.labeler.scene.redoMaskState()

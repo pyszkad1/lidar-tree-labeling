@@ -29,7 +29,7 @@ class DrawableGraphicsScene(QGraphicsScene):
         self._binary_mask = np.zeros((height, width), dtype=np.uint8)
 
         self.history = HistoryQueue(10)
-        self.history.push(self._binary_mask.copy())
+        self.history.push(self._binary_mask.copy()) # Save the initial mask state
 
         self.isDrawing = False
         self.lastPoint = QPoint()
@@ -116,6 +116,8 @@ class DrawableGraphicsScene(QGraphicsScene):
     def drawForeground(self, painter, rect):
         painter.drawImage(rect, self.maskImage, rect)
 
+
+
     def saveMaskState(self):
         self.history.push(self._binary_mask.copy())
 
@@ -124,6 +126,12 @@ class DrawableGraphicsScene(QGraphicsScene):
         prev_state = self.history.undo()
         if prev_state is not None:
             self.set_mask_image(prev_state)
+
+    def redoMaskState(self):
+        # Call this method in response to Ctrl+Y
+        next_state = self.history.redo()
+        if next_state is not None:
+            self.set_mask_image(next_state)
 
 
 
@@ -186,7 +194,7 @@ class DrawableGraphicsScene(QGraphicsScene):
         qimage = QImage(rgba_image.data, width, height, QImage.Format_RGBA8888)
         self.maskImage = qimage
         self._binary_mask = mask_array
-        self.update()
+        self.update_mask_image(mask_array)
 
     def _update_binary_mask_from_image(self):
         # Convert the mask image to a binary mask
