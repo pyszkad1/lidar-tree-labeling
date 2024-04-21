@@ -5,6 +5,7 @@ def transform_file(file_path):
     f = open(file_path)
     ranges = [0] * (1024 * 128)
     img = np.zeros((128, 1024, 3), np.uint8)
+    array = np.zeros((128, 1024), np.uint8)
     for i in range(11):
         f.readline()
 
@@ -36,8 +37,9 @@ def transform_file(file_path):
             img[y][x][0] = gray
             img[y][x][1] = gray
             img[y][x][2] = gray
+            array[y][x] = gray
 
-    return img
+    return img, array
 
 
 beam_altitude_angles = [
