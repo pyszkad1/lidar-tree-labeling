@@ -7,13 +7,25 @@ import matplotlib.pyplot as plt
 
 
 class TrunkDataset(Dataset):
-    def __init__(self, data_dir=r"C:\Users\Adam\Desktop\school\Bc_projekt\labeling\data\labeled"):
+    def __init__(self, data_dir=r"C:\Users\Adam\Desktop\school\Bc_projekt\labeling\data\labeled", exclude_oldest=0):
         self.data_dir = data_dir
-        self.data_files = [f for f in os.listdir(data_dir) if f.endswith('.npy') and not f.endswith('.bin.npy')]
+        all_files = [f for f in os.listdir(data_dir) if f.endswith('.npy') and not f.endswith('.bin.npy')]
+
+        # Exclude a specified number of the oldest files
+        all_files.sort(key=lambda x: os.path.getmtime(os.path.join(data_dir, x)))
+        if exclude_oldest > 0 and exclude_oldest < len(all_files):
+            all_files = all_files[exclude_oldest:]
+
+        self.data_files = all_files
         self.mask_files = [f.replace('.npy', '.bin.npy') for f in self.data_files]
+
 
     def __len__(self):
         return len(self.data_files)
+
+    def get_batch_size(self):
+        #return len(self.data_files) // 5
+        return 4    #TODO change to dynamic value
 
     def __getitem__(self, idx):
         # Load input data
@@ -29,6 +41,7 @@ class TrunkDataset(Dataset):
         target_tensor = torch.from_numpy(target_mask).float().unsqueeze(0)  # Add channel dimension
 
         return input_tensor, target_tensor
+
 
 
 def save_plot(csv_file, loss_plot_file, accuracy_plot_file):

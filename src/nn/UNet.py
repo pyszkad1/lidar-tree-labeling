@@ -58,17 +58,12 @@ class UNet(nn.Module):
 
 
 
-def train_UNet(num_epochs=5):
-    model = UNet(n_channels=1, n_classes=1)
-    train_dataset = TrunkDataset()
-    train_dataloader = DataLoader(train_dataset, batch_size=4, shuffle=True) #TODO change batch size
-    validation_dataset = TrunkDataset()
-    validation_dataloader = DataLoader(validation_dataset, batch_size=1)
-
+def train_UNet(model, dataset ,num_epochs=5):
     criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-
+    batch_size = dataset.get_batch_size()
+    train_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     # Open a file to write the losses and accuracy
     with open('training_validation_losses_accuracy.csv', 'w', newline='') as file:
@@ -83,7 +78,6 @@ def train_UNet(num_epochs=5):
             total_train = 0
             i = 0
             for inputs, targets in train_dataloader:
-
                 print(f"in learning for cycle: iteration {i+1} / {len(train_dataloader)}")
                 i += 1
                 optimizer.zero_grad()
@@ -99,41 +93,49 @@ def train_UNet(num_epochs=5):
                 total_train += targets.numel()
 
             train_accuracy = 100 * correct_train / total_train
-
-            # # Validation phase with accuracy calculation
-            # model.eval()
-            # validation_loss = 0.0
-            # correct_val = 0
-            # total_val = 0
-            # with torch.no_grad():
-            #     for inputs, targets in validation_dataloader:
-            #         outputs = model(inputs)
-            #         loss = criterion(outputs, targets)
-            #         validation_loss += loss.item()
-            #
-            #         # Calculate validation accuracy
-            #         predicted = outputs > 0.5
-            #         correct_val += (predicted == targets).sum().item()
-            #         total_val += targets.numel()
-            #
-            # validation_accuracy = 100 * correct_val / total_val
-            #
-            # # Write the current epoch's losses and accuracy to the file
-            # writer.writerow(
-            #     [epoch + 1, train_loss / len(train_dataloader), validation_loss / len(validation_dataloader),
-            #      train_accuracy, validation_accuracy])
-
-            validation_loss = 0
-            validation_accuracy = 0
-
             print(
-                f"Epoch [{epoch + 1}/{num_epochs}], Training Loss: {train_loss / len(train_dataloader)}, Validation Loss: {validation_loss / len(validation_dataloader)}, Training Accuracy: {train_accuracy}, Validation Accuracy: {validation_accuracy}")
+                f"Epoch [{epoch + 1}/{num_epochs}], Training Loss: {train_loss / len(train_dataloader)}, Training Accuracy: {train_accuracy}")
 
     print("Training complete")
     torch.save(model.state_dict(), 'model_state_dict.pth')
 
     return model
 
+
+def retrain_UNet(model, dataset, num_epochs=5):
+    batch_size = dataset.get_batch_size()
+    train_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+    criterion = nn.BCEWithLogitsLoss()
+    optimizer = optim.Adam(model.parameters(), lr=0.0001)
+
+    for epoch in range(num_epochs):
+        # Training phase with accuracy calculation
+        model.train()
+        train_loss = 0.0
+        correct_train = 0
+        total_train = 0
+        for i, (inputs, targets) in enumerate(train_dataloader):
+            print(f"in learning for cycle: iteration {i + 1} / {len(train_dataloader)}")
+            optimizer.zero_grad()
+            outputs = model(inputs)
+            loss = criterion(outputs, targets)
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.item()
+
+            # Calculate training accuracy
+            predicted = outputs > 0.5  # Assuming binary classification
+            correct_train += (predicted == targets).sum().item()
+            total_train += targets.numel()
+
+        train_accuracy = 100 * correct_train / total_train
+        print(f"Epoch [{epoch + 1}/{num_epochs}], Training Loss: {train_loss / len(train_dataloader)}, Training Accuracy: {train_accuracy}")
+
+    print("Retraining complete")
+    torch.save(model.state_dict(), 'model_state_dict.pth')
+
+    return model
 
 def test_model(model, test_dataloader, plot_dir):
     model.eval()
