@@ -56,8 +56,6 @@ class UNet(nn.Module):
         self.up4 = torch.utils.checkpoint(self.up4)
         self.outc = torch.utils.checkpoint(self.outc)
 
-
-
 def train_UNet(model, dataset ,num_epochs=5):
     criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
@@ -65,36 +63,31 @@ def train_UNet(model, dataset ,num_epochs=5):
     batch_size = dataset.get_batch_size()
     train_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
-    # Open a file to write the losses and accuracy
-    with open('training_validation_losses_accuracy.csv', 'w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(['Epoch', 'Training Loss', 'Validation Loss', 'Training Accuracy', 'Validation Accuracy'])
+    for epoch in range(num_epochs):
+        # Training phase with accuracy calculation
+        model.train()
+        train_loss = 0.0
+        correct_train = 0
+        total_train = 0
+        i = 0
+        for inputs, targets in train_dataloader:
+            print(f"in learning for cycle: iteration {i+1} / {len(train_dataloader)}")
+            i += 1
+            optimizer.zero_grad()
+            outputs = model(inputs)
+            loss = criterion(outputs, targets)
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.item()
 
-        for epoch in range(num_epochs):
-            # Training phase with accuracy calculation
-            model.train()
-            train_loss = 0.0
-            correct_train = 0
-            total_train = 0
-            i = 0
-            for inputs, targets in train_dataloader:
-                print(f"in learning for cycle: iteration {i+1} / {len(train_dataloader)}")
-                i += 1
-                optimizer.zero_grad()
-                outputs = model(inputs)
-                loss = criterion(outputs, targets)
-                loss.backward()
-                optimizer.step()
-                train_loss += loss.item()
+            # Calculate training accuracy
+            predicted = outputs > 0.5  # Assuming binary classification
+            correct_train += (predicted == targets).sum().item()
+            total_train += targets.numel()
 
-                # Calculate training accuracy
-                predicted = outputs > 0.5  # Assuming binary classification
-                correct_train += (predicted == targets).sum().item()
-                total_train += targets.numel()
-
-            train_accuracy = 100 * correct_train / total_train
-            print(
-                f"Epoch [{epoch + 1}/{num_epochs}], Training Loss: {train_loss / len(train_dataloader)}, Training Accuracy: {train_accuracy}")
+        train_accuracy = 100 * correct_train / total_train
+        print(
+            f"Epoch [{epoch + 1}/{num_epochs}], Training Loss: {train_loss / len(train_dataloader)}, Training Accuracy: {train_accuracy}")
 
     print("Training complete")
     torch.save(model.state_dict(), 'model_state_dict.pth')

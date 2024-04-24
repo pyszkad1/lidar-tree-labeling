@@ -5,9 +5,10 @@ from src.nn.data_utils import *
 
 class NNControls:
     def __init__(self):
+        self.is_learning = False
         self.current_predictions = None
         self.model = None
-        self.last_amount_of_pictures = 0 # TODO this needs to be saved in a file?
+        self.last_amount_of_pictures = 0
 
     def learn_UNet(self):
         print('Learning UNet')
