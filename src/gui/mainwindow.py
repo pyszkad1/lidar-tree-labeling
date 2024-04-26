@@ -4,7 +4,7 @@ import numpy as np
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QWindow, QPixmap, QPainter
 from PyQt5.QtWidgets import QVBoxLayout, QMainWindow, QWidget, QPushButton, QHBoxLayout, QSpacerItem, QSizePolicy, \
-    QFileDialog
+    QFileDialog, QMessageBox
 
 from src.gui.image_transformation import transform_file
 from src.gui.labeler import Labeler
@@ -52,21 +52,37 @@ class MainWindow(QMainWindow):
 
         return top_pane
 
-
-
     def _prompt_for_file(self, namefilter="PCD Files (*.pcd)"):
         options = QFileDialog.Options()
         options |= QFileDialog.DontUseNativeDialog
         file_dialog = QFileDialog()
         file_dialog.setFileMode(QFileDialog.ExistingFile)
         file_dialog.setNameFilter(namefilter)
-        file_dialog.setDirectory(r"C:\Users\Adam\Desktop\school\Bc_projekt\labeling\data")
+
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        project_dir = os.path.dirname(os.path.dirname(script_dir))
+        target_directory = os.path.join(project_dir, 'data', 'pcd_data')
+
+        file_dialog.setDirectory(target_directory)
 
         res = file_dialog.exec_()
         if not res:
             return None
         value = file_dialog.selectedFiles()[0]
         return value
+
+    def _prompt_for_save_name(self):
+        options = QFileDialog.Options()
+        file_dialog = QFileDialog()
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        project_dir = os.path.dirname(os.path.dirname(script_dir))
+        target_directory = os.path.join(project_dir, 'data', 'true_labels')
+        file_dialog.setDirectory(target_directory)
+        filename, _ = file_dialog.getSaveFileName(self, "Save Files", "", "All Files (*)", options=options)
+        if not os.path.exists(target_directory):
+            QMessageBox.warning(self, "Directory Not Found",
+                                "The specified directory does not exist: " + target_directory)
+        return filename
 
     def open_image(self):
         filename = self._prompt_for_file()
@@ -125,15 +141,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print("Failed to save files:", e)
 
-    def _prompt_for_save_name(self):
-        options = QFileDialog.Options()
-        file_dialog = QFileDialog()
-        file_dialog.setDirectory(r"C:\Users\Adam\Desktop\school\Bc_projekt\labeling\data\labeled")
 
-
-        filename, _ = QFileDialog.getSaveFileName(self, "Save Files", "",
-                                                  "All Files (*)", options=options)
-        return filename
 
     def _get_mask_as_binary(self):
         # Assuming maskImage is a QImage, convert it to a numpy array first

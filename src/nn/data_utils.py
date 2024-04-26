@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 
 class TrunkDataset(Dataset):
-    def __init__(self, data_dir=r"C:\Users\Adam\Desktop\school\Bc_projekt\labeling\data\labeled", exclude_oldest=0):
+    def __init__(self, data_dir, exclude_oldest=0):
         self.data_dir = data_dir
         all_files = [f for f in os.listdir(data_dir) if f.endswith('.npy') and not f.endswith('.bin.npy')]
 
@@ -23,7 +23,7 @@ class TrunkDataset(Dataset):
         return len(self.data_files)
 
     def get_batch_size(self):
-        return len(self.data_files) // 5
+        return len(self.data_files) // 4
 
     def __getitem__(self, idx):
         # Load input data
