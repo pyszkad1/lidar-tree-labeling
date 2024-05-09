@@ -118,6 +118,44 @@ def distribute_files(source_dir, target_dirs):
             shutil.copy(os.path.join(source_dir, filename), os.path.join(target_dir, filename))
             print(f"Copied {filename} to {target_dir}")
 
+def jaccard_index(true_mask, pred_mask):
+    true_mask = np.asarray(true_mask, dtype=bool)
+    pred_mask = np.asarray(pred_mask, dtype=bool)
+    intersection = np.logical_and(true_mask, pred_mask)
+    union = np.logical_or(true_mask, pred_mask)
+    if union.sum() == 0:
+        return 1.0 if intersection.sum() == 0 else 0.0
+    return intersection.sum() / union.sum()
+
+
+def compute_jaccard_for_directory(pred_dir, true_dir):
+    # Get list of predicted mask files
+    pred_files = [f for f in os.listdir(pred_dir) if f.endswith('.bin.npy')]
+
+    # Initialize an empty dictionary to store Jaccard Index results
+    jaccard_scores = {}
+
+    # Loop through each predicted mask file
+    for pred_file in pred_files:
+        pred_mask_path = os.path.join(pred_dir, pred_file)
+        true_mask_path = os.path.join(true_dir, pred_file)
+
+        # Check if the corresponding true mask file exists
+        if os.path.exists(true_mask_path):
+            # Load both masks
+            pred_mask = np.load(pred_mask_path)
+            true_mask = np.load(true_mask_path)
+
+            # Compute the Jaccard Index
+            score = jaccard_index(true_mask, pred_mask)
+
+            # Store the score with the file name as key
+            jaccard_scores[pred_file] = score
+        else:
+            print(f"No corresponding true mask found for {pred_file}")
+
+    return jaccard_scores
+
 
 
 if __name__ == '__main__':
