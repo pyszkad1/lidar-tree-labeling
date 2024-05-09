@@ -57,7 +57,7 @@ def train_UNet(model, dataset ,num_epochs=5):
         total_train = 0
         i = 0
         for inputs, targets in train_dataloader:
-            print(f"in learning for cycle: iteration {i+1} / {len(train_dataloader)}")
+            print(f"in learning for cycle: iteration {i+1} / {len(train_dataloader)}, number of images: {len(inputs)}")
             i += 1
             optimizer.zero_grad()
             outputs = model(inputs)
