@@ -61,6 +61,10 @@ class NNControls:
             print("Predictions made")
 
 
+if __name__ == '__main__':
+    nn_controls = NNControls()
+    nn_controls.learn_UNet()
 
+    print("Done")
 
 
