@@ -148,7 +148,7 @@ class DrawableGraphicsScene(QGraphicsScene):
         """Check if two colors are similar based on a given tolerance."""
         return np.linalg.norm(color1 - color2) <= tolerance
 
-    def smart_select(self, x: int, y: int, tolerance=40):
+    def smart_select(self, x: int, y: int, tolerance=30):
         """Selects a contiguous region with similar colors around (x, y)."""
         height, width, _ = self._background_image_numpy.shape
         visited = np.zeros((height, width), dtype=bool)
