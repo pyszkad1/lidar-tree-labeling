@@ -16,3 +16,11 @@ data/pred2
 data/pred3
 data/pred4
 data/pred4_25e
+data/batch1
+data/batch2
+data/batch3
+data/katka
+data/mamka
+data/with_nn
+data/without_nn
+src/model_state_dict.pth

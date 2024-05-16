@@ -34,18 +34,15 @@ class MainWindow(QMainWindow):
     def _init_top_widget(self, ):
         top_pane = QWidget()
         top_pane_layout = QHBoxLayout(top_pane)
-        # Add a button to open a file
         self.open_button = QPushButton("Open")
         self.open_button.clicked.connect(self.open_image)
         top_pane_layout.addWidget(self.open_button)
-        # Add a button to save the file
         self.save_button = QPushButton("Save")
         self.save_button.clicked.connect(self.save_files)
         top_pane_layout.addWidget(self.save_button)
         self.load_mask_button = QPushButton("Load Mask From File")
         self.load_mask_button.clicked.connect(self.open_mask_file)
         top_pane_layout.addWidget(self.load_mask_button)
-
 
         spacer = QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
         top_pane_layout.addSpacerItem(spacer)
@@ -73,7 +70,7 @@ class MainWindow(QMainWindow):
         file_dialog = QFileDialog()
         script_dir = os.path.dirname(os.path.abspath(__file__))
         project_dir = os.path.dirname(os.path.dirname(script_dir))
-        target_directory = os.path.join(project_dir, 'data') #TODO add labelled
+        target_directory = os.path.join(project_dir, 'data', 'labeled')
         file_dialog.setDirectory(target_directory)
         filename, _ = file_dialog.getSaveFileName(self, "Save Files", "", "All Files (*)", options=options)
         if not os.path.exists(target_directory):
@@ -84,7 +81,7 @@ class MainWindow(QMainWindow):
     def open_image(self):
         script_dir = os.path.dirname(os.path.abspath(__file__))
         project_dir = os.path.dirname(os.path.dirname(script_dir))
-        target_directory = os.path.join(project_dir, 'data', 'test')
+        target_directory = os.path.join(project_dir, 'data', 'pcd_data')
         filename = self._prompt_for_file(target_directory)
         if not filename:
             return
@@ -100,7 +97,7 @@ class MainWindow(QMainWindow):
     def open_mask_file(self):
         script_dir = os.path.dirname(os.path.abspath(__file__))
         project_dir = os.path.dirname(os.path.dirname(script_dir))
-        target_directory = os.path.join(project_dir, 'data', 'true_labels') #TODO change to labelled directory
+        target_directory = os.path.join(project_dir, 'data', 'labeled')
         filename = self._prompt_for_file(target_directory, "Numpy Files (*.bin.npy)")
         if not filename:
             return
@@ -148,11 +145,10 @@ class MainWindow(QMainWindow):
 
 
     def _get_mask_as_binary(self):
-        # Assuming maskImage is a QImage, convert it to a numpy array first
+        # convert it to a numpy array first
         arr = self.labeler.get_mask_bits()
 
         # Create a binary mask: 1 where the pixel is yellow, 0 elsewhere
-        # saved as 2d array
         binary_mask = np.any(arr != 0, axis=-1).astype(int)[..., np.newaxis].squeeze()
 
         return binary_mask

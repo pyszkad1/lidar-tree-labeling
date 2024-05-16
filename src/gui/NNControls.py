@@ -14,7 +14,9 @@ class NNControls:
         print('Learning UNet')
         script_dir = os.path.dirname(os.path.abspath(__file__))  # Gets the directory of the current script
         project_dir = os.path.dirname(os.path.dirname(script_dir))  # Move up two levels to get to the project root
-        target_directory = os.path.join(project_dir, 'data', 'train4')
+
+        # directory we will get the data to train the model, change in case of need
+        target_directory = os.path.join(project_dir, 'data', 'labeled')
 
         if os.path.exists('model_state_dict.pth'):
             print("Model found. Loading model...")
