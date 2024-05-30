@@ -1,10 +1,12 @@
 import sys
+from image_transformation import *
 import numpy as np
-from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QGraphicsScene, QGraphicsView, QSpacerItem, QSizePolicy
+from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QGraphicsScene, \
+    QGraphicsView, QSpacerItem, QSizePolicy, QFileDialog
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QBrush
 from PyQt5.QtCore import Qt, QPoint, QRect, QRectF
 
-DATA_WIDTH = 1000
+DATA_WIDTH = 1024
 DATA_HEIGHT = 128
 Y_STRETCH = 4
 
@@ -34,7 +36,24 @@ class DrawableGraphicsScene(QGraphicsScene):
         self.endPoint = QPoint()
         self.tempImage = None  # Temporary image for drawing shapes
 
-
+    def openFile(self):
+        options = QFileDialog.Options()
+        options |= QFileDialog.DontUseNativeDialog
+        file_dialog = QFileDialog()
+        file_dialog.setFileMode(QFileDialog.ExistingFile)
+        #file_dialog.setNameFilter("Text Files (*.txt)")
+        if file_dialog.exec_():
+            file_name = file_dialog.selectedFiles()[0]
+            try:
+                # with open(file_name, 'r') as file:
+                #     content = file.read()
+                #     # Convert each line into a float and reshape the result into a 2D array with one column
+                #     array = np.array([float(line) for line in content.split('\n') if line], ndmin=2).reshape(-1, 1)
+                #     rgb_array = self.convertArrayToRGB(array)
+                rgb_array = transform_file(file_name)
+                self.setBackgroundImageFromArray(rgb_array)
+            except Exception as e:
+                print("Error:", e)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -81,8 +100,14 @@ class DrawableGraphicsScene(QGraphicsScene):
 
                 self.addPixmap(tempPixmap)
             elif self.drawingMode == 'Erase':
-                painter.setPen(QPen(Qt.transparent, 10, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+                print("I am erasing")
+
+                eraserSize = 10  # Adjust the eraser size as needed
+                painter.setPen(QPen(Qt.transparent, eraserSize, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
                 painter.setCompositionMode(QPainter.CompositionMode_Clear)
+
+                painter.drawLine(self.lastPoint, event.scenePos())
+
             else:
                 painter.setPen(QPen(self.penColor, 10, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
                 painter.drawLine(self.lastPoint, event.scenePos())
@@ -103,15 +128,23 @@ class DrawableGraphicsScene(QGraphicsScene):
         return mask
 
     def setBackgroundImageFromArray(self, array):
+        # Ensure the array is in the correct 3D shape (height, width, channels)
         if array.ndim != 3 or array.shape[2] not in [3, 4]:
             raise ValueError("Array must be a 3D array with 3 or 4 channels.")
-        height, width, channels = array.shape
+
+
+        resized_array = np.resize(array, (DATA_HEIGHT, DATA_WIDTH, array.shape[2]))
+
+        # Calculate bytesPerLine for the QImage
+        height, width, channels = resized_array.shape
         bytesPerLine = channels * width
+
+        # Choose format based on the number of channels
         format = QImage.Format_RGB888 if channels == 3 else QImage.Format_RGBA8888
-        self.backgroundImage = QImage(array.data, width, height, bytesPerLine, format)
+
+        # Create QImage from the resized array
+        self.backgroundImage = QImage(resized_array.data, width, height, bytesPerLine, format)
         self.update()
-
-
 
 class Window(QMainWindow):
 
@@ -149,6 +182,7 @@ class Window(QMainWindow):
         self.button2 = QPushButton("Rectangle")
         self.button3 = QPushButton("Draw")
         self.button4 = QPushButton("Erase")
+        self.open_button = QPushButton("Open File")
 
         # Make buttons square
         button_size = 100  # Define a fixed size for buttons
@@ -156,18 +190,21 @@ class Window(QMainWindow):
         self.button2.setFixedSize(button_size, button_size)
         self.button3.setFixedSize(button_size, button_size)
         self.button4.setFixedSize(button_size, button_size)
+        self.open_button.setFixedSize(button_size, button_size)
 
         # Add buttons to the layout with spacers
         self.buttons_layout.addWidget(self.button1)
         self.buttons_layout.addWidget(self.button2)
-        self.buttons_layout.addSpacerItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
         self.buttons_layout.addWidget(self.button3)
         self.buttons_layout.addWidget(self.button4)
+        self.buttons_layout.addWidget(self.open_button)
+        self.buttons_layout.addSpacerItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
 
         self.button1.clicked.connect(self.setFreehandMode)
-        self.button2.clicked.connect(self.setRectangleMode)  # Assuming you have a future use for this
+        self.button2.clicked.connect(self.setRectangleMode)
         self.button3.clicked.connect(self.setDrawMode)
         self.button4.clicked.connect(self.setEraseMode)
+        self.open_button.clicked.connect(self.scene.openFile)
 
         # Add buttons layout to the main layout
         self.main_layout.addLayout(self.buttons_layout)
@@ -180,6 +217,7 @@ class Window(QMainWindow):
         self.button2.setStyleSheet(defaultStyle)
         self.button3.setStyleSheet(defaultStyle)
         self.button4.setStyleSheet(defaultStyle)
+        self.open_button.setStyleSheet(defaultStyle)
 
     def setActiveButtonStyle(self, button):
         # Define an active button stylesheet
@@ -213,13 +251,6 @@ def main():
     app = QApplication(sys.argv)
     window = Window(DATA_WIDTH, DATA_HEIGHT*Y_STRETCH)
     window.show()
-
-    # Example: Create an RGB array and draw it
-    # Create a red square
-    red_square = np.random.randint(0, 256, (DATA_HEIGHT*Y_STRETCH, DATA_WIDTH, 3), dtype=np.uint8)
-
-    #window.scene.setBackgroundImageFromArray(red_square)
-
     sys.exit(app.exec_())
 
 
