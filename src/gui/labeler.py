@@ -1,12 +1,20 @@
 import sys
 import numpy as np
 from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QGraphicsScene, QGraphicsView, QSpacerItem, QSizePolicy
-from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen
+from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QBrush
 from PyQt5.QtCore import Qt, QPoint, QRect, QRectF
 
 DATA_WIDTH = 1000
 DATA_HEIGHT = 128
 Y_STRETCH = 4
+
+
+def make_rect(p1: QPoint, p2: QPoint):
+    topLeftX = min(p1.x(), p2.x())
+    topLeftY = min(p1.y(), p2.y())
+    bottomRightX = max(p1.x(), p2.x())
+    bottomRightY = max(p1.y(), p2.y())
+    return QRect(topLeftX, topLeftY, bottomRightX - topLeftX, bottomRightY - topLeftY)
 
 
 class DrawableGraphicsScene(QGraphicsScene):
@@ -44,8 +52,9 @@ class DrawableGraphicsScene(QGraphicsScene):
             if self.drawingMode == 'Rectangle':
                 # Finalize drawing by updating the maskImage with the tempImage
                 painter = QPainter(self.maskImage)
-                painter.setPen(QPen(self.penColor, 2, Qt.SolidLine, Qt.SquareCap, Qt.BevelJoin))
-                rect = QRect(self.startPoint.toPoint(), event.scenePos())
+                painter.setBrush(QBrush(self.penColor))
+                painter.setPen(Qt.NoPen)
+                rect = make_rect(self.startPoint.toPoint(), event.scenePos().toPoint())
                 painter.drawRect(rect)
                 painter.end()
                 self.tempImage = None
