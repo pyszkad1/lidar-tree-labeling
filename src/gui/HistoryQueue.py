@@ -1,23 +1,28 @@
 class HistoryQueue:
     def __init__(self, capacity=5):
+        self.undoStack = []  # Stack to keep track of history for undo actions
+        self.redoStack = []  # Stack to keep redo actions
         self.capacity = capacity
-        self.queue = [None] * capacity
-        self.current = -1  # Points to the current state
-        self.oldest = 0  # Points to the oldest state
 
     def push(self, mask_state):
-        # Advance and wrap the current pointer
-        self.current = (self.current + 1) % self.capacity
-        # If the queue is full, oldest moves with current
-        if self.current == self.oldest:
-            self.oldest = (self.oldest + 1) % self.capacity
-        self.queue[self.current] = mask_state
+        if len(self.undoStack) >= self.capacity:
+            self.undoStack.pop(0)  # Remove the oldest state to maintain capacity
+        self.undoStack.append(mask_state)
+        self.redoStack.clear()  # Clear the redo stack as new state creates a new branch
+        print(f"Pushed state, undoStack: {len(self.undoStack)}, redoStack: {len(self.redoStack)}")
 
     def undo(self):
-        if self.current == self.oldest and self.queue[self.current] is None:
-            return None  # Nothing to undo
-        prev_state = self.queue[self.current]
-        self.current = (self.current - 1) % self.capacity
-        if self.queue[self.current] is None:  # Fix wrapping issue
-            self.current = (self.capacity - 1)
-        return prev_state
+        if len(self.undoStack) < 2:
+            return None  # Not enough states to undo
+        self.redoStack.append(self.undoStack.pop())  # Move the current state to redo stack
+        prev_state = self.undoStack[-1]  # Get the state before the last one
+        print(f"Undo, undoStack: {len(self.undoStack)}, redoStack: {len(self.redoStack)}")
+        return prev_state  # Return the state before the last one
+
+    def redo(self):
+        if not self.redoStack:
+            return None  # Nothing to redo
+        state = self.redoStack.pop()  # Pop the most recent state from redo stack
+        self.undoStack.append(state)  # Push it back onto the undo stack
+        print(f"Redo, undoStack: {len(self.undoStack)}, redoStack: {len(self.redoStack)}")
+        return state
