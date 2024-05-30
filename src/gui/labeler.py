@@ -5,7 +5,7 @@ from src.gui.NNControls import *
 import numpy as np
 from PyQt5.QtWidgets import QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QGraphicsScene, \
     QGraphicsView, QSpacerItem, QSizePolicy, QFileDialog, QDialog, QLabel, QComboBox, QSlider, QMessageBox
-from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QBrush, QMouseEvent
+from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QBrush, QMouseEvent, QColor
 from PyQt5.QtCore import Qt, QPoint, QRect, QRectF, QObject, pyqtSignal, QThread
 
 DATA_WIDTH = 1024
@@ -29,25 +29,20 @@ class DrawableGraphicsScene(QGraphicsScene):
         self.history = HistoryQueue(10)
         self.history.push(self._binary_mask.copy())  # Save the initial mask state
 
+        self.temp_history = HistoryQueue(2)
+
         self.isDrawing = False
         self.lastPoint = QPoint()
         self.drawingMode = 'Draw'
 
         self.pen_size = 10
         self.eraser_size = 10
+        self.current_opacity = 1.0
 
-        self.pen_color = Qt.yellow  # Default pen color for drawin
+        self.pen_color = QColor(Qt.yellow)
         self.startPoint = QPoint()
         self.endPoint = QPoint()
         self.tempImage = None  # Temporary image for drawing shapes
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self.isDrawing = True
-            self.lastPoint = event.scenePos()
-            self.startPoint = event.scenePos()
-            if self.drawingMode == 'Rectangle':
-                self.tempImage = self.maskImage.copy()  # Copy the current mask image
 
     @staticmethod
     def make_rect(p1: QPoint, p2: QPoint):
@@ -56,6 +51,14 @@ class DrawableGraphicsScene(QGraphicsScene):
         bottom_right_x = max(p1.x(), p2.x())
         bottom_right_y = max(p1.y(), p2.y())
         return QRect(top_left_x, top_left_y, bottom_right_x - top_left_x, bottom_right_y - top_left_y)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.isDrawing = True
+            self.lastPoint = event.scenePos()
+            self.startPoint = event.scenePos()
+            if self.drawingMode == 'Rectangle':
+                self.tempImage = self.maskImage.copy()  # Copy the current mask image
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton and self.isDrawing:
@@ -79,6 +82,7 @@ class DrawableGraphicsScene(QGraphicsScene):
                     self.update_mask_image(smart_select_mask)
 
             self._update_binary_mask_from_image()
+            self.update_opacity(int(self.current_opacity * 100))
             self.saveMaskState()  # Save the current mask state to the history queue
             self.update()
 
@@ -172,38 +176,6 @@ class DrawableGraphicsScene(QGraphicsScene):
 
         return mask
 
-    def smart_select_2(self, x: int, y: int, tolerance=30):
-        """Selects a contiguous region with similar colors around (x, y)."""
-        height, width, _ = self._background_image_numpy.shape
-        visited = np.zeros((height, width), dtype=bool)
-        mask = np.zeros((height, width), dtype=bool)
-
-        # Initial color to compare with
-        target_color = self._background_image_numpy[y, x, :]
-        # Stack for depth-first search
-        stack = [(y, x, target_color)]
-
-        while stack:
-            current_y, current_x, current_target_color = stack.pop()
-
-            # Skip out-of-bounds or already visited pixels
-            if current_x < 0 or current_x >= width or current_y < 0 or current_y >= height or visited[
-                current_y, current_x]:
-                continue
-
-            visited[current_y, current_x] = True  # Mark as visited
-
-            # Check color similarity
-            if self.is_similar(self._background_image_numpy[current_y, current_x, :], current_target_color, tolerance):
-                mask[current_y, current_x] = True  # Mark as part of the region
-
-                # Add neighboring pixels to the stack
-                stack.extend(
-                    [(current_y + dy, current_x + dx, self._background_image_numpy[current_y, current_x, :]) for dx, dy
-                     in [(-1, 0), (1, 0), (0, -1), (0, 1)]])
-
-        return mask
-
     def update_mask_image(self, mask):
         painter = QPainter(self.maskImage)
         painter.setPen(QPen(Qt.yellow, 1))  # Set the pen color and size
@@ -216,7 +188,10 @@ class DrawableGraphicsScene(QGraphicsScene):
                     painter.drawPoint(x, y)  # Draw a point for every True value in the mask
 
         painter.end()
+        if self.current_opacity < 1.0:
+            self.update_opacity(int(self.current_opacity * 100))
         self.update()
+
 
     def set_mask_image(self, mask_array: np.ndarray) -> None:
         # mask is a 2D numpy array with 1s where the mask is and 0s elsewhere
@@ -265,6 +240,29 @@ class DrawableGraphicsScene(QGraphicsScene):
         self.backgroundImage = QImage(resized_array.data, width, height, bytesPerLine, format)
         self._background_image_numpy = resized_array
         self.update()
+
+    def update_opacity(self, value):
+        """Update the opacity of the image based on the slider value."""
+        # Calculate opacity (0.0 to 1.0)
+        opacity = value / 100.0
+        self.current_opacity = opacity
+
+        image = self.maskImage
+        if image.format() != QImage.Format_ARGB32 and image.format() != QImage.Format_ARGB32_Premultiplied:
+            image = image.convertToFormat(QImage.Format_ARGB32)
+
+        for x in range(image.width()):
+            for y in range(image.height()):
+                if self._binary_mask[y, x] == 0:
+                    continue
+                color = QColor(image.pixel(x, y))
+                color.setAlpha(int(255 * opacity))  # Set alpha based on opacity factor (0.0 to 1.0)
+                image.setPixel(x, y, color.rgba())
+
+        self.maskImage = image
+        self.update()
+        print("Opacity updated")
+
 
 
 class ZoomableGraphicsView(QGraphicsView):
@@ -429,6 +427,21 @@ class Labeler(QWidget):
         self.erase_layout.addWidget(self.erase_slider)
         self.layout.addLayout(self.erase_layout)
 
+        self.opacity_layout = QVBoxLayout()
+        self.opacity_pane = QWidget()
+        self.opacity_pane.setLayout(self.opacity_layout)
+        self.opacity_slider = QSlider(Qt.Horizontal)
+        self.opacity_slider.setMinimum(0)
+        self.opacity_slider.setMaximum(100)
+        self.opacity_slider.setValue(100)
+        self.opacity_slider.setTickInterval(10)
+        self.opacity_slider.setFixedSize(slider_width, slider_height)
+        self.opacity_slider.sliderReleased.connect(lambda: self.scene.update_opacity(self.opacity_slider.value()))
+        self.opacity_layout.addWidget(QLabel("Mask Opacity:"))
+        self.opacity_layout.addWidget(self.opacity_slider)
+        self.layout.addLayout(self.opacity_layout)
+
+
         # Make buttons square
         button_size = 100  # Define a fixed size for buttons
 
@@ -443,6 +456,7 @@ class Labeler(QWidget):
         self.buttons_layout.addWidget(self.button_rectangle, alignment=Qt.AlignTop)
         self.buttons_layout.addWidget(self.erase_button_pane, alignment=Qt.AlignTop)
         self.buttons_layout.addWidget(self.button_smart_select, alignment=Qt.AlignTop)
+        self.buttons_layout.addWidget(self.opacity_pane, alignment=Qt.AlignTop)
         self.buttons_layout.addSpacerItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
 
         widget = QWidget()
@@ -459,6 +473,8 @@ class Labeler(QWidget):
 
         self._reset_button_styles()
         self._set_draw_mode()
+
+
 
     def _reset_button_styles(self):
         # Define a default stylesheet
@@ -531,8 +547,6 @@ class Labeler(QWidget):
         use_mask_button.setStyleSheet(default_style)
         use_mask_button.setFixedSize(button_size, button_size)
 
-
-
         # Add spacer to push buttons to the right
         right_pane_layout.addSpacerItem(QSpacerItem(20, 20, QSizePolicy.Minimum, QSizePolicy.Minimum))
 
@@ -550,17 +564,27 @@ class Labeler(QWidget):
         self.scene.saveMaskState()
 
     def _start_training(self):
+        if self.NN_controller.is_learning:
+            QMessageBox.information(self, "Training in progress", "Training is already in progress.")
+            return
+        self.NN_controller.is_learning = True
         self.thread = QThread()
         self.worker = TrainingWorker(self.NN_controller)
+
         self.worker.moveToThread(self.thread)
 
         self.thread.started.connect(self.worker.train_model)
         self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.stopped_learning)
         self.worker.finished.connect(self.worker.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
         self.worker.error.connect(self._handle_error)
-        #TODO add progress bar
+
         self.thread.start()
+
+    def stopped_learning(self):
+        self.NN_controller.is_learning = False
+        QMessageBox.information(self, "Training complete", "Training is complete.")
 
     def _handle_error(self, e):
         QMessageBox.critical(self, "Error", str(e))
@@ -571,7 +595,7 @@ class Labeler(QWidget):
 class TrainingWorker(QObject):
     finished = pyqtSignal()
     error = pyqtSignal(Exception)
-    #progress = pyqtSignal(int)
+
     def __init__(self, NNControls):
         super().__init__()
         self.NNControls = NNControls
