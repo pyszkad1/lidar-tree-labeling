@@ -7,12 +7,8 @@ from PyQt5.QtWidgets import QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, 
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QBrush
 from PyQt5.QtCore import Qt, QPoint, QRect, QRectF
 
-
-
 DATA_WIDTH = 1024
 DATA_HEIGHT = 128
-
-
 
 
 class DrawableGraphicsScene(QGraphicsScene):
@@ -29,7 +25,7 @@ class DrawableGraphicsScene(QGraphicsScene):
         self._binary_mask = np.zeros((height, width), dtype=np.uint8)
 
         self.history = HistoryQueue(10)
-        self.history.push(self._binary_mask.copy()) # Save the initial mask state
+        self.history.push(self._binary_mask.copy())  # Save the initial mask state
 
         self.isDrawing = False
         self.lastPoint = QPoint()
@@ -47,12 +43,13 @@ class DrawableGraphicsScene(QGraphicsScene):
             if self.drawingMode == 'Rectangle':
                 self.tempImage = self.maskImage.copy()  # Copy the current mask image
 
-    def make_rect(self, p1: QPoint, p2: QPoint):
-        topLeftX = min(p1.x(), p2.x())
-        topLeftY = min(p1.y(), p2.y())
-        bottomRightX = max(p1.x(), p2.x())
-        bottomRightY = max(p1.y(), p2.y())
-        return QRect(topLeftX, topLeftY, bottomRightX - topLeftX, bottomRightY - topLeftY)
+    @staticmethod
+    def makeRect(p1: QPoint, p2: QPoint):
+        top_left_x = min(p1.x(), p2.x())
+        top_left_y = min(p1.y(), p2.y())
+        bottom_right_x = max(p1.x(), p2.x())
+        bottom_right_y = max(p1.y(), p2.y())
+        return QRect(top_left_x, top_left_y, bottom_right_x - top_left_x, bottom_right_y - top_left_y)
 
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton and self.isDrawing:
@@ -168,6 +165,39 @@ class DrawableGraphicsScene(QGraphicsScene):
                 stack.extend([(current_y + dy, current_x + dx) for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]])
 
         return mask
+
+    def smart_select_2(self, x : int, y : int, tolerance=20):
+        """Selects a contiguous region with similar colors around (x, y)."""
+        height, width, _ = self._background_image_numpy.shape
+        visited = np.zeros((height, width), dtype=bool)
+        mask = np.zeros((height, width), dtype=bool)
+
+        # Initial color to compare with
+        target_color = self._background_image_numpy[y, x, :]
+        # Stack for depth-first search
+        stack = [(y, x, target_color)]
+
+        while stack:
+            current_y, current_x, current_target_color = stack.pop()
+
+            # Skip out-of-bounds or already visited pixels
+            if current_x < 0 or current_x >= width or current_y < 0 or current_y >= height or visited[
+                current_y, current_x]:
+                continue
+
+            visited[current_y, current_x] = True  # Mark as visited
+
+            # Check color similarity
+            if self.is_similar(self._background_image_numpy[current_y, current_x, :], current_target_color, tolerance):
+                mask[current_y, current_x] = True  # Mark as part of the region
+
+                # Add neighboring pixels to the stack
+                stack.extend(
+                    [(current_y + dy, current_x + dx, self._background_image_numpy[current_y, current_x, :]) for dx, dy
+                     in [(-1, 0), (1, 0), (0, -1), (0, 1)]])
+
+        return mask
+
 
     def update_mask_image(self, mask):
         painter = QPainter(self.maskImage)
@@ -295,16 +325,17 @@ class Labeler(QWidget):
 
     def _reset_button_styles(self):
         # Define a default stylesheet
-        defaultStyle = "QPushButton { background-color: None; }"
-        self.button1.setStyleSheet(defaultStyle)
-        self.button2.setStyleSheet(defaultStyle)
-        self.button3.setStyleSheet(defaultStyle)
-        self.button4.setStyleSheet(defaultStyle)
+        default_style = "QPushButton { background-color: None; }"
+        self.button1.setStyleSheet(default_style)
+        self.button2.setStyleSheet(default_style)
+        self.button3.setStyleSheet(default_style)
+        self.button4.setStyleSheet(default_style)
+        self.button5.setStyleSheet(default_style)
 
     def _set_active_button_style(self, button):
         # Define an active button stylesheet
-        activeStyle = "QPushButton { background-color: grey; }"
-        button.setStyleSheet(activeStyle)
+        active_style = "QPushButton { background-color: grey; }"
+        button.setStyleSheet(active_style)
 
     def _set_freehand_mode(self):
         self.scene.drawingMode = 'Freehand'

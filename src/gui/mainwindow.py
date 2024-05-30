@@ -19,7 +19,7 @@ class MainWindow(QMainWindow):
         self.setGeometry(100, 100, 1500, 900)  # window size
 
         # Create a central widget
-        central_widget  = QWidget()
+        central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
         # Set the layout for the central widget
