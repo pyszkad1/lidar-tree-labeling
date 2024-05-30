@@ -140,6 +140,10 @@ class DrawableGraphicsScene(QGraphicsScene):
         if next_state is not None:
             self.set_mask_image(next_state)
 
+    def clear_undo_redo(self):
+        self.history = HistoryQueue(10)
+        self.history.push(self._binary_mask.copy())
+
     def is_similar(self, color1, color2, tolerance):
         """Check if two colors are similar based on a given tolerance."""
         return np.linalg.norm(color1 - color2) <= tolerance
