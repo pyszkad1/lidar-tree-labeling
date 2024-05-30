@@ -11,6 +11,9 @@ from src.nn.data_utils import *
 
 import csv
 
+
+#source: https://github.com/milesial/Pytorch-UNet
+
 _SIZE = (128, 1024)
 class UNet(nn.Module):
     def __init__(self, n_channels, n_classes):

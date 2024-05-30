@@ -28,26 +28,21 @@ class TrunkDataset(Dataset):
         return len(self.data_files) // 4
 
     def __getitem__(self, idx):
-        # Load input data
         input_path = os.path.join(self.data_dir, self.data_files[idx])
         input_data = np.load(input_path)
 
-        # Load mask data
         mask_path = os.path.join(self.data_dir, self.mask_files[idx])
         target_mask = np.load(mask_path)
 
-        # Convert arrays to tensors
-        input_tensor = torch.from_numpy(input_data).float().unsqueeze(0)  # Add channel dimension
-        target_tensor = torch.from_numpy(target_mask).float().unsqueeze(0)  # Add channel dimension
+        input_tensor = torch.from_numpy(input_data).float().unsqueeze(0)
+        target_tensor = torch.from_numpy(target_mask).float().unsqueeze(0)
 
         return input_tensor, target_tensor
 
 
 def save_plot(csv_file, loss_plot_file, accuracy_plot_file):
-    # Read the CSV file
     data = pd.read_csv(csv_file)
 
-    # Plot for loss
     plt.figure(figsize=(10, 6))
     plt.plot(data['Epoch'], data['Training Loss'], label='Training Loss')
     plt.plot(data['Epoch'], data['Validation Loss'], label='Validation Loss')
@@ -58,7 +53,6 @@ def save_plot(csv_file, loss_plot_file, accuracy_plot_file):
     plt.savefig(loss_plot_file)
     plt.close()
 
-    # Plot for accuracy
     plt.figure(figsize=(10, 6))
     plt.plot(data['Epoch'], data['Training Accuracy'], label='Training Accuracy')
     plt.plot(data['Epoch'], data['Validation Accuracy'], label='Validation Accuracy')
@@ -71,49 +65,34 @@ def save_plot(csv_file, loss_plot_file, accuracy_plot_file):
 
 
 def rename_files(starting_number, directory='data'):
-    # List all files in the specified directory
 
     files = os.listdir(directory)
 
-    # Sort files to maintain order if needed
     files.sort()
 
-    # Rename each file
     for i, filename in enumerate(files):
-        # Define new filename, prepending the starting number
         number = str(starting_number + i).zfill(2)
         new_filename = f"{number}_{filename}"
-        # Define the full old and new file paths
         old_file = os.path.join(directory, filename)
         new_file = os.path.join(directory, new_filename)
-        # Rename the file
         os.rename(old_file, new_file)
         print(f"Renamed '{filename}' to '{new_filename}'")
 
 
 def distribute_files(source_dir, target_dirs):
-    # Create a dictionary to store groups of files
     file_groups = defaultdict(list)
 
-    # List all files in the source directory
     for filename in os.listdir(source_dir):
-        # Extract the number prefix assuming the format "number.extension"
         prefix = filename.split('.')[0]
-        # Group files by their number prefix
         file_groups[prefix].append(filename)
 
-    # Prepare the target directories by ensuring they exist
     for dir_path in target_dirs:
         os.makedirs(dir_path, exist_ok=True)
 
-    # Flatten the list of groups into a single list to evenly distribute them
     grouped_files = list(file_groups.values())
 
-    # Distribute the groups evenly across the target directories
     for index, group in enumerate(grouped_files):
-        # Determine which directory to use based on the index
         target_dir = target_dirs[index % len(target_dirs)]
-        # Copy all files in the group to the selected directory
         for filename in group:
             shutil.copy(os.path.join(source_dir, filename), os.path.join(target_dir, filename))
             print(f"Copied {filename} to {target_dir}")
@@ -168,7 +147,6 @@ def compute_metrics_for_directory(pred_dir, true_dir):
         else:
             print(f"No corresponding true mask found for {pred_file}")
 
-    # Calculate averages
     avg_jaccard = np.mean(list(jaccard_scores.values())) if jaccard_scores else 0
     avg_precision = np.mean(list(precision_scores.values())) if precision_scores else 0
     avg_accuracy = np.mean(list(accuracy_scores.values())) if accuracy_scores else 0
@@ -176,30 +154,88 @@ def compute_metrics_for_directory(pred_dir, true_dir):
     return jaccard_scores, precision_scores, accuracy_scores, avg_jaccard, avg_precision, avg_accuracy
 
 
-if __name__ == '__main__':
-    script_dir = os.path.dirname(os.path.abspath(__file__))  # Gets the directory of the current script
+def run_compute_metrics_and_save_them():
+    script_dir = os.path.dirname(os.path.abspath(__file__))
     project_dir = os.path.dirname(os.path.dirname(script_dir))
-    pred_directory = os.path.join(project_dir, 'data', 'pred4_25e')
+    pred_directory = os.path.join(project_dir, 'data', 'with_nn')
     true_directory = os.path.join(project_dir, 'data', 'true_labels')
 
-    jaccard_scores, precision_scores, accuracy_scores, avg_jaccard, avg_precision, avg_accuracy = compute_metrics_for_directory(pred_directory, true_directory)
+    jaccard_scores, precision_scores, accuracy_scores, avg_jaccard, avg_precision, avg_accuracy = compute_metrics_for_directory(
+        pred_directory, true_directory)
 
-    # Determine the file with the best Jaccard score
+    std_jaccard = np.std(list(jaccard_scores.values()))
+    std_precision = np.std(list(precision_scores.values()))
+    std_accuracy = np.std(list(accuracy_scores.values()))
+
     best_jaccard_file = max(jaccard_scores, key=jaccard_scores.get)
     best_jaccard_score = jaccard_scores[best_jaccard_file]
 
-    # Prepare the results text
-    results_text = f"Jaccard Score: {avg_jaccard}\n"
-    results_text += f"Best Jaccard Score: {best_jaccard_score} in file {best_jaccard_file}\n"
-    results_text += f"Precision Score: {avg_precision}\n"
-    results_text += f"Accuracy Score: {avg_accuracy}\n"
+    results_text = (
+        f"Jaccard Score: {avg_jaccard}, Standard Deviation: {std_jaccard}\n"
+        f"Best Jaccard Score: {best_jaccard_score} in file {best_jaccard_file}\n"
+        f"Precision Score: {avg_precision}, Standard Deviation: {std_precision}\n"
+        f"Accuracy Score: {avg_accuracy}, Standard Deviation: {std_accuracy}\n"
+    )
 
-    # Write the results to a file in the prediction directory
     results_file_path = os.path.join(pred_directory, 'results.txt')
     with open(results_file_path, 'w') as results_file:
         results_file.write(results_text)
 
     print(f"Results written to {results_file_path}")
+
+def convert_time_to_minutes(time_list):
+    minutes = []
+    for time_str in time_list:
+        min_part, sec_part = time_str.split('m')
+        minutes.append(int(min_part) + int(sec_part.rstrip('s')) / 60)
+    return minutes
+
+
+def create_graph_of_time():
+    images = list(range(1, 11))
+    time_with_nn = ['1m 24s', '3m 30s', '2m 00s', '2m 51s', '3m 08s', '1m 42s', '1m 05s', '2m 00s', '2m 47s', '0m 53s']
+    time_without_nn = ['6m 58s', '5m 04s', '3m 38s', '5m 13s', '5m 07s', '3m 06s', '3m 32s', '4m 34s', '5m 20s',
+                       '2m 53s']
+
+    time_with_nn_min = convert_time_to_minutes(time_with_nn)
+    time_without_nn_min = convert_time_to_minutes(time_without_nn)
+
+    # Plotting times
+    plt.figure(figsize=(10, 6))
+    plt.plot(images, time_with_nn_min, marker='o', color='tab:orange', label='With NN Assistance')
+    plt.plot(images, time_without_nn_min, marker='x', color='tab:blue', label='Without NN Assistance')
+    plt.xlabel('Image Number')
+    plt.ylabel('Time Spent (minutes)')
+    plt.title('Time Spent Labeling With vs. Without NN Assistance')
+    plt.legend()
+    plt.grid(True)
+    plt.xticks(images)
+    plt.savefig('Time_Comparison.png')
+    plt.show()
+
+
+    # Plotting speedup
+    speedup = [without / with_nn for without, with_nn in zip(time_without_nn_min, time_with_nn_min)]
+
+    average_speedup = np.mean(speedup)
+
+    plt.figure(figsize=(10, 6))
+    plt.bar(images, speedup, color='tab:blue')
+    plt.axhline(y=average_speedup, color='r', linestyle='-', label=f'Average Speedup: {average_speedup:.2f}x')
+    plt.xlabel('Image Number')
+    plt.ylabel('Speedup Factor')
+    plt.title('Speedup from NN Assistance')
+    plt.xticks(images)
+    plt.legend()
+    plt.savefig('Speedup_Factor.png')
+    plt.show()
+
+
+if __name__ == '__main__':
+    create_graph_of_time()
+
+
+
 
 
 
