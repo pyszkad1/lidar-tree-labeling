@@ -52,16 +52,13 @@ class MainWindow(QMainWindow):
 
         return top_pane
 
-    def _prompt_for_file(self, namefilter="PCD Files (*.pcd)"):
+    def _prompt_for_file(self, target_directory ,namefilter="PCD Files (*.pcd)"):
         options = QFileDialog.Options()
         options |= QFileDialog.DontUseNativeDialog
         file_dialog = QFileDialog()
         file_dialog.setFileMode(QFileDialog.ExistingFile)
         file_dialog.setNameFilter(namefilter)
 
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        project_dir = os.path.dirname(os.path.dirname(script_dir))
-        target_directory = os.path.join(project_dir, 'data', 'pcd_data')
 
         file_dialog.setDirectory(target_directory)
 
@@ -85,7 +82,10 @@ class MainWindow(QMainWindow):
         return filename
 
     def open_image(self):
-        filename = self._prompt_for_file()
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        project_dir = os.path.dirname(os.path.dirname(script_dir))
+        target_directory = os.path.join(project_dir, 'data', 'data_to_be_annotated') #TODO change to pcd_data directory
+        filename = self._prompt_for_file(target_directory)
         if not filename:
             return
         try:
@@ -98,7 +98,10 @@ class MainWindow(QMainWindow):
 
 
     def open_mask_file(self):
-        filename = self._prompt_for_file(namefilter="Numpy Files (*.*)")
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        project_dir = os.path.dirname(os.path.dirname(script_dir))
+        target_directory = os.path.join(project_dir, 'data', 'true_labels') #TODO change to labelled directory
+        filename = self._prompt_for_file(target_directory, "Numpy Files (*.bin.npy)")
         if not filename:
             return
         try:
