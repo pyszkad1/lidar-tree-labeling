@@ -1,8 +1,7 @@
 import os
-import sys
-from image_transformation import *
+from src.gui.image_transformation import *
 import numpy as np
-from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QGraphicsScene, \
+from PyQt5.QtWidgets import QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QGraphicsScene, \
     QGraphicsView, QSpacerItem, QSizePolicy, QFileDialog
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QBrush
 from PyQt5.QtCore import Qt, QPoint, QRect, QRectF
@@ -27,7 +26,7 @@ class DrawableGraphicsScene(QGraphicsScene):
         self.image_width_height = height
         self.backgroundImage = QImage(width, height, QImage.Format_RGB32)
         self.backgroundImage.fill(Qt.transparent)
-        self.maskImage = QImage(width, height, QImage.Format_ARGB32)
+        self.maskImage = QImage(width, height, QImage.Format_RGBA8888)
         self.maskImage.fill(Qt.transparent)
         self.isDrawing = False
         self.lastPoint = QPoint()
@@ -37,26 +36,6 @@ class DrawableGraphicsScene(QGraphicsScene):
         self.endPoint = QPoint()
         self.tempImage = None  # Temporary image for drawing shapes
 
-    def openFile(self):
-        options = QFileDialog.Options()
-        options |= QFileDialog.DontUseNativeDialog
-        file_dialog = QFileDialog()
-        file_dialog.setFileMode(QFileDialog.ExistingFile)
-        #file_dialog.setNameFilter("Text Files (*.txt)")
-        if file_dialog.exec_():
-            file_name = file_dialog.selectedFiles()[0]
-            try:
-                # with open(file_name, 'r') as file:
-                #     content = file.read()
-                #     # Convert each line into a float and reshape the result into a 2D array with one column
-                #     array = np.array([float(line) for line in content.split('\n') if line], ndmin=2).reshape(-1, 1)
-                #     rgb_array = self.convertArrayToRGB(array)
-                rgb_array = transform_file(file_name)
-                self.setBackgroundImageFromArray(rgb_array)
-                self.adjustCanvasSize(rgb_array.shape[1], rgb_array.shape[0])
-            except Exception as e:
-                print("Error:", e)
-
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.isDrawing = True
@@ -65,12 +44,11 @@ class DrawableGraphicsScene(QGraphicsScene):
             if self.drawingMode == 'Rectangle':
                 self.tempImage = self.maskImage.copy()  # Copy the current mask image
 
-
-
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton and self.isDrawing:
             self.isDrawing = False
             if self.drawingMode == 'Rectangle':
+                self.clear()
                 # Finalize drawing by updating the maskImage with the tempImage
                 painter = QPainter(self.maskImage)
                 painter.setBrush(QBrush(self.penColor))
@@ -80,7 +58,6 @@ class DrawableGraphicsScene(QGraphicsScene):
                 painter.end()
                 self.tempImage = None
             self.update()
-
 
     def mouseMoveEvent(self, event):
         print(event.scenePos())
@@ -117,23 +94,25 @@ class DrawableGraphicsScene(QGraphicsScene):
             self.update()
             del painter
 
-
     def drawBackground(self, painter, rect):
         painter.drawImage(rect, self.backgroundImage, rect)
 
     def drawForeground(self, painter, rect):
-        painter.drawImage(0, 0, self.maskImage)
+        painter.drawImage(rect, self.maskImage, rect)
+
+        # painter.drawImage(0, 0, self.maskImage)
 
     def getMaskArray(self):
-        mask = np.array(self.maskImage.convertToFormat(QImage.Format_Grayscale8).bits()).reshape((self._height, self._width))
+        mask = np.array(self.maskImage.convertToFormat(QImage.Format_Grayscale8).bits()).reshape(
+            (self._height, self._width))
         mask = np.where(mask > 0, 1, 0)
         return mask
 
-    def setBackgroundImageFromArray(self, array):
+    def set_background_image_from_array(self, array: np.ndarray):
         # Ensure the array is in the correct 3D shape (height, width, channels)
+
         if array.ndim != 3 or array.shape[2] not in [3, 4]:
             raise ValueError("Array must be a 3D array with 3 or 4 channels.")
-
 
         resized_array = np.resize(array, (DATA_HEIGHT, DATA_WIDTH, array.shape[2]))
 
@@ -148,24 +127,27 @@ class DrawableGraphicsScene(QGraphicsScene):
         self.backgroundImage = QImage(resized_array.data, width, height, bytesPerLine, format)
         self.update()
 
-class Window(QMainWindow):
 
-    def __init__(self, width, height):
+class Labeler(QWidget):
+
+    def get_drawn_mask(self) -> QPixmap:
+        return QPixmap.fromImage(self.scene.maskImage)
+
+    def set_background_image(self, array: np.ndarray) -> None:
+        # self.adjustCanvasSize(array.shape[1], array.shape[0])
+        self.scene.set_background_image_from_array(array)
+
+    def get_image_qpixmap(self) -> QPixmap:
+        return QPixmap.fromImage(self.scene.backgroundImage)
+
+    def __init__(self, width: int = DATA_WIDTH, height: int = DATA_HEIGHT):
         super().__init__()
 
         self.image_width = width
         self.image_height = height
 
-        # Set main window properties
-        self.setWindowTitle("Labeler")
-        self.setGeometry(100, 100, width + 20 , height + 120)  # window size
-
-        # Create a widget to hold everything
-        self.central_widget = QWidget()
-        self.setCentralWidget(self.central_widget)
-
         # Main layout for the widget
-        self.main_layout = QVBoxLayout(self.central_widget)
+        self.main_layout = QVBoxLayout(self)
 
         # Create the canvas
         self.scene = DrawableGraphicsScene(self.image_width, self.image_height)
@@ -184,11 +166,6 @@ class Window(QMainWindow):
         self.button2 = QPushButton("Rectangle")
         self.button3 = QPushButton("Draw")
         self.button4 = QPushButton("Erase")
-        self.open_button = QPushButton("Open File")
-
-        self.save_button = QPushButton("Save")
-        self.save_button.clicked.connect(self.saveImageAndMask)
-        self.buttons_layout.addWidget(self.save_button)
 
         # Make buttons square
         button_size = 100  # Define a fixed size for buttons
@@ -196,128 +173,75 @@ class Window(QMainWindow):
         self.button2.setFixedSize(button_size, button_size)
         self.button3.setFixedSize(button_size, button_size)
         self.button4.setFixedSize(button_size, button_size)
-        self.open_button.setFixedSize(button_size, button_size)
 
         # Add buttons to the layout with spacers
         self.buttons_layout.addWidget(self.button1)
         self.buttons_layout.addWidget(self.button2)
         self.buttons_layout.addWidget(self.button3)
         self.buttons_layout.addWidget(self.button4)
-        self.buttons_layout.addWidget(self.open_button)
         self.buttons_layout.addSpacerItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
 
-        self.button1.clicked.connect(self.setFreehandMode)
-        self.button2.clicked.connect(self.setRectangleMode)
-        self.button3.clicked.connect(self.setDrawMode)
-        self.button4.clicked.connect(self.setEraseMode)
-        self.open_button.clicked.connect(self.scene.openFile)
+        self.button1.clicked.connect(self._set_freehand_mode)
+        self.button2.clicked.connect(self._set_rectangle_mode)
+        self.button3.clicked.connect(self._set_draw_mode)
+        self.button4.clicked.connect(self._set_erase_mode)
 
         # Add buttons layout to the main layout
         self.main_layout.addLayout(self.buttons_layout)
-        self.resetButtonStyles()
+        self._reset_button_styles()
 
-    def resetButtonStyles(self):
+    def _reset_button_styles(self):
         # Define a default stylesheet
         defaultStyle = "QPushButton { background-color: None; }"
         self.button1.setStyleSheet(defaultStyle)
         self.button2.setStyleSheet(defaultStyle)
         self.button3.setStyleSheet(defaultStyle)
         self.button4.setStyleSheet(defaultStyle)
-        self.open_button.setStyleSheet(defaultStyle)
 
-    def setActiveButtonStyle(self, button):
+    def _set_active_button_style(self, button):
         # Define an active button stylesheet
         activeStyle = "QPushButton { background-color: grey; }"
         button.setStyleSheet(activeStyle)
 
-    def setFreehandMode(self):
+    def _set_freehand_mode(self):
         self.scene.drawingMode = 'Freehand'
         self.scene.penColor = Qt.yellow
-        self.resetButtonStyles()
-        self.setActiveButtonStyle(self.button1)
+        self._reset_button_styles()
+        self._set_active_button_style(self.button1)
 
-    def setRectangleMode(self):
+    def _set_rectangle_mode(self):
         self.scene.drawingMode = 'Rectangle'
         self.scene.penColor = Qt.yellow
-        self.resetButtonStyles()
-        self.setActiveButtonStyle(self.button2)
+        self._reset_button_styles()
+        self._set_active_button_style(self.button2)
 
-    def setDrawMode(self):
+    def _set_draw_mode(self):
         self.scene.drawingMode = 'Draw'
         self.scene.penColor = Qt.yellow
-        self.resetButtonStyles()
-        self.setActiveButtonStyle(self.button3)
+        self._reset_button_styles()
+        self._set_active_button_style(self.button3)
 
-    def setEraseMode(self):
+    def _set_erase_mode(self):
         self.scene.drawingMode = 'Erase'
-        self.resetButtonStyles()
-        self.setActiveButtonStyle(self.button4)
+        self._reset_button_styles()
+        self._set_active_button_style(self.button4)
 
-    def keyPressEvent(self, event):
-        if event.key() == Qt.Key_S and (event.modifiers() & Qt.ControlModifier):
-            self.saveImageAndMask()
+    def get_mask_bits(self) -> np.ndarray:
+        ptr = self.scene.maskImage.bits()
+        ptr.setsize(self.scene.maskImage.byteCount())
+        return np.array(ptr).reshape(self.scene.maskImage.height(), self.scene.maskImage.width(), 4)  # 4 for RGBA
 
-    def saveImageAndMask(self):
-        options = QFileDialog.Options()
-        # Use a base file name for both saves. Strip extension if user provides one.
-        fileName, _ = QFileDialog.getSaveFileName(self, "Save Files", "",
-                                                  "All Files (*)", options=options)
-        if fileName:
-            baseFileName, _ = os.path.splitext(fileName)  # Removes extension if present
+    def set_mask_image(self, mask_array: np.ndarray) -> None:
 
-            try:
-                # Combine backgroundImage and maskImage
-                combinedImage = self.combineImages(self.scene.backgroundImage, self.scene.maskImage)
+        height, width = mask_array.shape
 
-                # Save the combined image
-                combinedImageFileName = f"{baseFileName}.png"
-                combinedImage.save(combinedImageFileName)
-                print("Combined image saved successfully:", combinedImageFileName)
+        rgba_image = np.zeros((height, width, 4), dtype=np.uint8)
+        rgba_image[mask_array == 1] = [255, 255, 0, 255]  # Yellow
+        rgba_image[mask_array == 0] = [0, 0, 0, 0]  # Transparent
 
-                # Convert maskImage to binary mask and save
-                binaryMask = self.convertToBinaryMask(self.scene.maskImage)
-                binaryMaskFileName = f"{baseFileName}.bin"
-                np.save(binaryMaskFileName, binaryMask)
-                print("Binary mask saved successfully:", binaryMaskFileName)
-
-            except Exception as e:
-                print("Failed to save files:", e)
-
-    def convertToBinaryMask(self, maskImage):
-        # Assuming maskImage is a QImage, convert it to a numpy array first
-        ptr = maskImage.bits()
-        ptr.setsize(maskImage.byteCount())
-        arr = np.array(ptr).reshape(maskImage.height(), maskImage.width(), 4)  # 4 for RGBA
-
-        # Define yellow in RGBA (adjust the values to match your exact yellow)
-        yellow = np.array([255, 255, 0, 255], dtype=np.uint8)
-
-        # Create a binary mask: 1 where the pixel is yellow, 0 elsewhere
-        binaryMask = np.all(arr[:, :, :4] == yellow, axis=-1).astype(int)
-
-        return binaryMask
-
-    def combineImages(self, backgroundImage, maskImage):
-        # Convert QImage to QPixmap to use QPainter
-        backgroundPixmap = QPixmap.fromImage(backgroundImage)
-        maskPixmap = QPixmap.fromImage(maskImage)
-
-        # Create QPainter to draw the mask on top of the background
-        painter = QPainter(backgroundPixmap)
-        painter.setCompositionMode(QPainter.CompositionMode_SourceOver)  # Ensure mask overlays background
-        painter.drawPixmap(backgroundPixmap.rect(), maskPixmap)
-        painter.end()
-
-        # Convert back to QImage to save
-        combinedImage = backgroundPixmap.toImage()
-        return combinedImage
-
-def main():
-    app = QApplication(sys.argv)
-    window = Window(DATA_WIDTH, DATA_HEIGHT)
-    window.show()
-    sys.exit(app.exec_())
+        qimage = QImage(rgba_image.data, width, height, QImage.Format_RGBA8888)
+        self.scene.maskImage = qimage
+        self.scene.update()
 
 
-if __name__ == "__main__":
-    main()
+

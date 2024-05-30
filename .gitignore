@@ -8,6 +8,4 @@ __pycache__/
 venv/
 
 *.pcd
-src/**/*.txt
-src/**/*.png
-src/**/*.npy
+data/
