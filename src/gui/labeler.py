@@ -4,9 +4,9 @@ from src.gui.HistoryQueue import *
 from src.gui.NNControls import *
 import numpy as np
 from PyQt5.QtWidgets import QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QGraphicsScene, \
-    QGraphicsView, QSpacerItem, QSizePolicy, QFileDialog, QDialog, QLabel, QComboBox, QSlider
+    QGraphicsView, QSpacerItem, QSizePolicy, QFileDialog, QDialog, QLabel, QComboBox, QSlider, QMessageBox
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QBrush, QMouseEvent
-from PyQt5.QtCore import Qt, QPoint, QRect, QRectF
+from PyQt5.QtCore import Qt, QPoint, QRect, QRectF, QObject, pyqtSignal, QThread
 
 DATA_WIDTH = 1024
 DATA_HEIGHT = 128
@@ -230,6 +230,11 @@ class DrawableGraphicsScene(QGraphicsScene):
         self.maskImage = qimage
         self._binary_mask = mask_array
         self.update_mask_image(mask_array)
+
+    def clear_mask(self):
+        self.maskImage.fill(Qt.transparent)
+        self._binary_mask = np.zeros((self.image_height, self.image_width), dtype=np.uint8)
+        self.update()
 
     def _update_binary_mask_from_image(self):
         # Convert the mask image to a binary mask
@@ -498,6 +503,7 @@ class Labeler(QWidget):
             self.scene.eraser_size = size
             self._set_erase_mode()
 
+
     def get_mask_bits(self) -> np.ndarray:
         ptr = self.scene.maskImage.bits()
         ptr.setsize(self.scene.maskImage.byteCount())
@@ -507,10 +513,11 @@ class Labeler(QWidget):
         default_style = "QPushButton { background-color: None; }"
         button_size = 100
 
+
         right_widget = QWidget()
         right_pane_layout = QVBoxLayout()
         learn_button = QPushButton("Learn")
-        learn_button.clicked.connect(self.NN_controller.learn_UNet)
+        learn_button.clicked.connect(self._start_training)
         learn_button.setStyleSheet(default_style)
         learn_button.setFixedSize(button_size, button_size)
 
@@ -540,5 +547,42 @@ class Labeler(QWidget):
     def _use_predicted_mask(self):
         mask = self.NN_controller.current_predictions
         self.scene.set_mask_image(mask)
+        self.scene.saveMaskState()
+
+    def _start_training(self):
+        self.thread = QThread()
+        self.worker = TrainingWorker(self.NN_controller)
+        self.worker.moveToThread(self.thread)
+
+        self.thread.started.connect(self.worker.train_model)
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.worker.error.connect(self._handle_error)
+        #TODO add progress bar
+        self.thread.start()
+
+    def _handle_error(self, e):
+        QMessageBox.critical(self, "Error", str(e))
+        self.thread.quit()
+
+
+
+class TrainingWorker(QObject):
+    finished = pyqtSignal()
+    error = pyqtSignal(Exception)
+    #progress = pyqtSignal(int)
+    def __init__(self, NNControls):
+        super().__init__()
+        self.NNControls = NNControls
+
+    def train_model(self):
+        try:
+            self.NNControls.learn_UNet()
+            self.finished.emit()
+        except Exception as e:
+            self.error.emit(e)
+
+
 
 

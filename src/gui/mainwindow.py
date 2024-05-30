@@ -75,6 +75,7 @@ class MainWindow(QMainWindow):
         try:
             rgb_array, range_array = transform_file(filename)
             self.labeler.set_background_image(rgb_array, range_array)
+            self.labeler.scene.clear_mask()
         except Exception as e:
             print("Error:", e)
 
