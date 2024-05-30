@@ -3,8 +3,8 @@ from src.gui.image_transformation import *
 from src.gui.HistoryQueue import *
 import numpy as np
 from PyQt5.QtWidgets import QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QGraphicsScene, \
-    QGraphicsView, QSpacerItem, QSizePolicy, QFileDialog
-from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QBrush
+    QGraphicsView, QSpacerItem, QSizePolicy, QFileDialog, QDialog, QLabel, QComboBox
+from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QBrush, QMouseEvent
 from PyQt5.QtCore import Qt, QPoint, QRect, QRectF
 
 DATA_WIDTH = 1024
@@ -29,7 +29,8 @@ class DrawableGraphicsScene(QGraphicsScene):
 
         self.isDrawing = False
         self.lastPoint = QPoint()
-        self.drawingMode = 'Freehand'  # Default drawing mode
+        self.drawingMode = 'Draw'
+
         self.penColor = Qt.yellow  # Default pen color for drawin
         self.startPoint = QPoint()
         self.endPoint = QPoint()
@@ -66,14 +67,15 @@ class DrawableGraphicsScene(QGraphicsScene):
                 self.tempImage = None
             if self.drawingMode == 'Smart Select':
                 smart_select_mask = self.smart_select(int(event.scenePos().x()), int(event.scenePos().y()))
-                self.update_mask_image(smart_select_mask)
+                if smart_select_mask is not None:
+                    self.update_mask_image(smart_select_mask)
 
             self._update_binary_mask_from_image()
             self.saveMaskState() # Save the current mask state to the history queue
             self.update()
 
     def mouseMoveEvent(self, event):
-        print(event.scenePos())
+        #print(event.scenePos())
         if event.buttons() & Qt.LeftButton and self.isDrawing:
             painter = QPainter(self.maskImage)
 
@@ -113,8 +115,6 @@ class DrawableGraphicsScene(QGraphicsScene):
     def drawForeground(self, painter, rect):
         painter.drawImage(rect, self.maskImage, rect)
 
-
-
     def saveMaskState(self):
         self.history.push(self._binary_mask.copy())
 
@@ -130,13 +130,11 @@ class DrawableGraphicsScene(QGraphicsScene):
         if next_state is not None:
             self.set_mask_image(next_state)
 
-
-
     def is_similar(self, color1, color2, tolerance):
         """Check if two colors are similar based on a given tolerance."""
         return np.linalg.norm(color1 - color2) <= tolerance
 
-    def smart_select(self, x : int, y : int, tolerance=20):
+    def smart_select(self, x : int, y : int, tolerance=40):
         """Selects a contiguous region with similar colors around (x, y)."""
         height, width, _ = self._background_image_numpy.shape
         visited = np.zeros((height, width), dtype=bool)
@@ -144,6 +142,8 @@ class DrawableGraphicsScene(QGraphicsScene):
 
         # Initial color to compare with
         target_color = self._background_image_numpy[y, x, :]
+        if target_color[0] == 0:
+            return None
         # Stack for depth-first search
         stack = [(y, x)]
 
@@ -166,7 +166,7 @@ class DrawableGraphicsScene(QGraphicsScene):
 
         return mask
 
-    def smart_select_2(self, x : int, y : int, tolerance=20):
+    def smart_select_2(self, x : int, y : int, tolerance=30):
         """Selects a contiguous region with similar colors around (x, y)."""
         height, width, _ = self._background_image_numpy.shape
         visited = np.zeros((height, width), dtype=bool)
@@ -206,8 +206,8 @@ class DrawableGraphicsScene(QGraphicsScene):
 
         for y in range(mask.shape[0]):
             for x in range(mask.shape[1]):
-                if mask[y, x]:
-                    self._binary_mask = mask
+                if mask[y, x] and not self._binary_mask[y, x] and self._background_image_numpy[y, x, 0] != 0:
+                    self._binary_mask[y, x] = 1
                     painter.drawPoint(x, y)  # Draw a point for every True value in the mask
 
         painter.end()
@@ -258,6 +258,98 @@ class DrawableGraphicsScene(QGraphicsScene):
         self.update()
 
 
+
+class SizeSelectionDialog(QDialog):
+    def __init__(self, title="Select Size", default_size="10", parent=None):
+        super(SizeSelectionDialog, self).__init__(parent, Qt.WindowCloseButtonHint)
+        self.setWindowTitle(title)
+        self.layout = QVBoxLayout(self)
+        self.selected_size = int(default_size)  # Ensure this is always defined
+
+        # Create a label
+        self.label = QLabel("Select size:", self)
+        self.layout.addWidget(self.label)
+
+        # Create a combo box for selecting size
+        self.sizeComboBox = QComboBox(self)
+        self.sizeComboBox.addItems(["1", "5", "10", "20"])  # Adding predefined sizes as strings
+        self.sizeComboBox.setCurrentText(default_size)  # Set default size
+        self.layout.addWidget(self.sizeComboBox)
+
+        # Connect selection change to a method
+        self.sizeComboBox.currentIndexChanged.connect(self.on_size_selected)
+
+    def on_size_selected(self, index):
+        # Directly extract and apply the selected size
+        self.selected_size = int(self.sizeComboBox.currentText())
+        self.accept()
+
+class ZoomableGraphicsView(QGraphicsView):
+    def __init__(self, scene, parent=None):
+        super(ZoomableGraphicsView, self).__init__(scene, parent)
+        self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
+        self.setResizeAnchor(QGraphicsView.AnchorUnderMouse)
+        self.scale_factor = 1.15
+        self.current_scale = 1.0
+        self.panning = False
+        self.last_mouse_position = QPoint()
+
+    def wheelEvent(self, event):
+        if event.angleDelta().y() > 0:
+            self.zoom_in()
+        else:
+            self.zoom_out()
+
+    def zoom_in(self):
+        """Zoom into the view."""
+        self.scale(self.scale_factor, self.scale_factor)
+        self.current_scale *= self.scale_factor
+
+    def zoom_out(self):
+        """Zoom out of the view, with a limit to not zoom out past original size."""
+        if self.current_scale > 1.0:  # Check if the next zoom out is above the limit
+            self.current_scale /= self.scale_factor
+            if self.current_scale < 1.0:
+                self.current_scale = 1.0
+                self.scale(1, 1)
+            else:
+                self.scale(1 / self.scale_factor, 1 / self.scale_factor)
+
+    def mousePressEvent(self, event: QMouseEvent):
+        # print("Horizontal ScrollBar Range:", self.horizontalScrollBar().minimum(), self.horizontalScrollBar().maximum())
+        # print("Vertical ScrollBar Range:", self.verticalScrollBar().minimum(), self.verticalScrollBar().maximum())
+        if event.button() == Qt.RightButton:
+            self.panning = True
+            self.last_mouse_position = event.pos()
+            self.setCursor(Qt.ClosedHandCursor)
+            self.setDragMode(QGraphicsView.ScrollHandDrag)  # Optional: for built-in hand-drag functionality
+        else:
+            super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event: QMouseEvent):
+        if self.panning:
+            # Calculate how much we moved
+            delta = event.pos() - self.last_mouse_position
+            self.last_mouse_position = event.pos()
+
+            adjusted_delta = delta / self.current_scale * 1.2  # Adjust the delta based on the current scale
+
+            # Update the scrollbars
+            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - adjusted_delta.x())
+            self.verticalScrollBar().setValue(self.verticalScrollBar().value() - adjusted_delta.y())
+
+
+        else:
+            super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent):
+        if event.button() == Qt.RightButton:
+            self.panning = False
+            self.setCursor(Qt.ArrowCursor)
+            self.setDragMode(QGraphicsView.NoDrag)  # Optional: for built-in hand-drag functionality
+        else:
+            super().mouseReleaseEvent(event)
+
 class Labeler(QWidget):
     def get_drawn_mask(self) -> QPixmap:
         return QPixmap.fromImage(self.scene.maskImage)
@@ -280,7 +372,7 @@ class Labeler(QWidget):
 
         # Create the canvas
         self.scene = DrawableGraphicsScene(self.image_width, self.image_height)
-        self.view = QGraphicsView(self.scene)
+        self.view = ZoomableGraphicsView(self.scene)
         self.view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.view.setFixedSize(self.image_width, self.image_height)  # Canvas size
@@ -291,79 +383,99 @@ class Labeler(QWidget):
         self.buttons_layout = QHBoxLayout()
 
         # Create buttons
-        self.button1 = QPushButton("Freehand")
-        self.button2 = QPushButton("Rectangle")
-        self.button3 = QPushButton("Draw")
-        self.button4 = QPushButton("Erase")
-        self.button5 = QPushButton("Smart Select")
+
+        self.button_rectangle = QPushButton("Rectangle")
+
+        self.button_draw = QPushButton("Draw")
+        self.button_draw.clicked.connect(lambda: self.open_size_selection_dialog("Select Brush Size", self.button_draw))
+        self.buttons_layout.addWidget(self.button_draw)
+
+        self.button_erase = QPushButton("Erase")
+        self.button_erase.clicked.connect(lambda: self.open_size_selection_dialog("Select Eraser Size", self.button_erase))
+        self.buttons_layout.addWidget(self.button_erase)
+
+        self.button_smart_select = QPushButton("Smart Select")
 
         # Make buttons square
         button_size = 100  # Define a fixed size for buttons
-        self.button1.setFixedSize(button_size, button_size)
-        self.button2.setFixedSize(button_size, button_size)
-        self.button3.setFixedSize(button_size, button_size)
-        self.button4.setFixedSize(button_size, button_size)
-        self.button5.setFixedSize(button_size, button_size)
+
+        self.button_rectangle.setFixedSize(button_size, button_size)
+        self.button_draw.setFixedSize(button_size, button_size)
+        self.button_erase.setFixedSize(button_size, button_size)
+        self.button_smart_select.setFixedSize(button_size, button_size)
 
         # Add buttons to the layout with spacers
-        self.buttons_layout.addWidget(self.button1)
-        self.buttons_layout.addWidget(self.button2)
-        self.buttons_layout.addWidget(self.button3)
-        self.buttons_layout.addWidget(self.button4)
-        self.buttons_layout.addWidget(self.button5)
+
+        self.buttons_layout.addWidget(self.button_rectangle)
+        self.buttons_layout.addWidget(self.button_draw)
+        self.buttons_layout.addWidget(self.button_erase)
+        self.buttons_layout.addWidget(self.button_smart_select)
         self.buttons_layout.addSpacerItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
 
-        self.button1.clicked.connect(self._set_freehand_mode)
-        self.button2.clicked.connect(self._set_rectangle_mode)
-        self.button3.clicked.connect(self._set_draw_mode)
-        self.button4.clicked.connect(self._set_erase_mode)
-        self.button5.clicked.connect(self._set_smart_select_mode)
+        self.button_rectangle.clicked.connect(self._set_rectangle_mode)
+        self.button_draw.clicked.connect(self._set_draw_mode)
+        self.button_erase.clicked.connect(self._set_erase_mode)
+        self.button_smart_select.clicked.connect(self._set_smart_select_mode)
 
         # Add buttons layout to the main layout
         self.main_layout.addLayout(self.buttons_layout)
         self._reset_button_styles()
+        self._set_draw_mode()
 
     def _reset_button_styles(self):
         # Define a default stylesheet
         default_style = "QPushButton { background-color: None; }"
-        self.button1.setStyleSheet(default_style)
-        self.button2.setStyleSheet(default_style)
-        self.button3.setStyleSheet(default_style)
-        self.button4.setStyleSheet(default_style)
-        self.button5.setStyleSheet(default_style)
+        self.button_rectangle.setStyleSheet(default_style)
+        self.button_draw.setStyleSheet(default_style)
+        self.button_erase.setStyleSheet(default_style)
+        self.button_smart_select.setStyleSheet(default_style)
 
     def _set_active_button_style(self, button):
         # Define an active button stylesheet
         active_style = "QPushButton { background-color: grey; }"
         button.setStyleSheet(active_style)
 
-    def _set_freehand_mode(self):
-        self.scene.drawingMode = 'Freehand'
-        self.scene.penColor = Qt.yellow
-        self._reset_button_styles()
-        self._set_active_button_style(self.button1)
-
     def _set_rectangle_mode(self):
         self.scene.drawingMode = 'Rectangle'
         self.scene.penColor = Qt.yellow
         self._reset_button_styles()
-        self._set_active_button_style(self.button2)
+        self._set_active_button_style(self.button_rectangle)
 
     def _set_draw_mode(self):
         self.scene.drawingMode = 'Draw'
         self.scene.penColor = Qt.yellow
         self._reset_button_styles()
-        self._set_active_button_style(self.button3)
+        self._set_active_button_style(self.button_draw)
 
     def _set_erase_mode(self):
         self.scene.drawingMode = 'Erase'
         self._reset_button_styles()
-        self._set_active_button_style(self.button4)
+        self._set_active_button_style(self.button_erase)
 
     def _set_smart_select_mode(self):
         self.scene.drawingMode = 'Smart Select'
         self._reset_button_styles()
-        self._set_active_button_style(self.button5)
+        self._set_active_button_style(self.button_smart_select)
+
+    def open_size_selection_dialog(self, title, button):
+        try:
+            button_pos = button.mapToGlobal(button.pos())
+            dialog = SizeSelectionDialog(title, "10", self)
+            dialog.move(button_pos + QPoint(0, button.height()))  # Position it below the button
+            if dialog.exec_() == QDialog.Accepted:
+                selected_size = dialog.get_selected_size()
+                if 'brush' in title.lower():
+                    self.set_brush_size(selected_size)
+                elif 'eraser' in title.lower():
+                    self.set_eraser_size(selected_size)
+        except Exception as e:
+            print(f"Error opening size selection dialog: {e}")
+
+    def set_brush_size(self, size):
+        print(f"Brush size set to: {size}")
+
+    def set_eraser_size(self, size):
+        print(f"Eraser size set to: {size}")
 
     def get_mask_bits(self) -> np.ndarray:
         ptr = self.scene.maskImage.bits()
