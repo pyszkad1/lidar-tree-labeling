@@ -84,7 +84,7 @@ class MainWindow(QMainWindow):
     def open_image(self):
         script_dir = os.path.dirname(os.path.abspath(__file__))
         project_dir = os.path.dirname(os.path.dirname(script_dir))
-        target_directory = os.path.join(project_dir, 'data', 'data_to_be_annotated') #TODO change to pcd_data directory
+        target_directory = os.path.join(project_dir, 'data', 'pcd_data')
         filename = self._prompt_for_file(target_directory)
         if not filename:
             return

@@ -12,14 +12,14 @@ class NNControls:
 
     def learn_UNet(self):
         print('Learning UNet')
+        script_dir = os.path.dirname(os.path.abspath(__file__))  # Gets the directory of the current script
+        project_dir = os.path.dirname(os.path.dirname(script_dir))  # Move up two levels to get to the project root
+        target_directory = os.path.join(project_dir, 'data', 'true_labels')
+
         if os.path.exists('model_state_dict.pth'):
             print("Model found. Loading model...")
             model = UNet(1, 1)
             model.load_state_dict(torch.load('model_state_dict.pth'))
-
-            script_dir = os.path.dirname(os.path.abspath(__file__))  # Gets the directory of the current script
-            project_dir = os.path.dirname(os.path.dirname(script_dir))  # Move up two levels to get to the project root
-            target_directory = os.path.join(project_dir, 'data', 'true_labels')
 
             new_dataset = TrunkDataset(target_directory, exclude_oldest=self.last_amount_of_pictures)
             self.last_amount_of_pictures = len(new_dataset) + self.last_amount_of_pictures
@@ -31,7 +31,7 @@ class NNControls:
 
         else:
             print("Model file not found. Training new model...")
-            train_dataset = TrunkDataset()
+            train_dataset = TrunkDataset(target_directory, exclude_oldest=self.last_amount_of_pictures)
             self.last_amount_of_pictures = len(train_dataset)
             model = UNet(1, 1)
             train_UNet(model, train_dataset)

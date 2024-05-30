@@ -13,22 +13,20 @@ import csv
 
 _SIZE = (128, 1024)
 class UNet(nn.Module):
-    def __init__(self, n_channels, n_classes, bilinear=False):
+    def __init__(self, n_channels, n_classes):
         super(UNet, self).__init__()
         self.n_channels = n_channels
         self.n_classes = n_classes
-        self.bilinear = bilinear
 
         self.inc = (DoubleConv(n_channels, 64))
         self.down1 = (Down(64, 128))
         self.down2 = (Down(128, 256))
         self.down3 = (Down(256, 512))
-        factor = 2 if bilinear else 1
-        self.down4 = (Down(512, 1024 // factor))
-        self.up1 = (Up(1024, 512 // factor, bilinear))
-        self.up2 = (Up(512, 256 // factor, bilinear))
-        self.up3 = (Up(256, 128 // factor, bilinear))
-        self.up4 = (Up(128, 64, bilinear))
+        self.down4 = (Down(512, 1024))
+        self.up1 = (Up(1024, 512))
+        self.up2 = (Up(512, 256))
+        self.up3 = (Up(256, 128))
+        self.up4 = (Up(128, 64))
         self.outc = (OutConv(64, n_classes))
 
     def forward(self, x):
@@ -44,24 +42,7 @@ class UNet(nn.Module):
         logits = self.outc(x)
         return logits
 
-    def use_checkpointing(self):
-        self.inc = torch.utils.checkpoint(self.inc)
-        self.down1 = torch.utils.checkpoint(self.down1)
-        self.down2 = torch.utils.checkpoint(self.down2)
-        self.down3 = torch.utils.checkpoint(self.down3)
-        self.down4 = torch.utils.checkpoint(self.down4)
-        self.up1 = torch.utils.checkpoint(self.up1)
-        self.up2 = torch.utils.checkpoint(self.up2)
-        self.up3 = torch.utils.checkpoint(self.up3)
-        self.up4 = torch.utils.checkpoint(self.up4)
-        self.outc = torch.utils.checkpoint(self.outc)
-
-def train_UNet(model, dataset, num_epochs=5):
-    # Check if CUDA is available and move the model to GPU if it is
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
-    model = model.to(device)
-
+def train_UNet(model, dataset ,num_epochs=5):
     criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
@@ -69,16 +50,15 @@ def train_UNet(model, dataset, num_epochs=5):
     train_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     for epoch in range(num_epochs):
+        # Training phase with accuracy calculation
         model.train()
         train_loss = 0.0
         correct_train = 0
         total_train = 0
         i = 0
         for inputs, targets in train_dataloader:
-            inputs, targets = inputs.to(device), targets.to(device)
             print(f"in learning for cycle: iteration {i+1} / {len(train_dataloader)}")
             i += 1
-
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = criterion(outputs, targets)
@@ -87,13 +67,13 @@ def train_UNet(model, dataset, num_epochs=5):
             train_loss += loss.item()
 
             # Calculate training accuracy
-            predicted = (outputs > 0.5).type(torch.float)
+            predicted = outputs > 0.5  # Assuming binary classification
             correct_train += (predicted == targets).sum().item()
             total_train += targets.numel()
 
         train_accuracy = 100 * correct_train / total_train
         print(
-            f"Epoch [{epoch + 1}/{num_epochs}], Training Loss: {train_loss / len(train_dataloader)}, Training Accuracy: {train_accuracy}%")
+            f"Epoch [{epoch + 1}/{num_epochs}], Training Loss: {train_loss / len(train_dataloader)}, Training Accuracy: {train_accuracy}")
 
     print("Training complete")
     torch.save(model.state_dict(), 'model_state_dict.pth')
@@ -102,26 +82,20 @@ def train_UNet(model, dataset, num_epochs=5):
 
 
 def retrain_UNet(model, dataset, num_epochs=5):
-    # Set up device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
-    model = model.to(device)
+    batch_size = dataset.get_batch_size()
+    train_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.0005)
 
-    batch_size = dataset.get_batch_size()
-    train_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-
     for epoch in range(num_epochs):
+        # Training phase with accuracy calculation
         model.train()
         train_loss = 0.0
         correct_train = 0
         total_train = 0
         for i, (inputs, targets) in enumerate(train_dataloader):
-            inputs, targets = inputs.to(device), targets.to(device)
             print(f"in learning for cycle: iteration {i + 1} / {len(train_dataloader)}")
-
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = criterion(outputs, targets)
@@ -130,12 +104,12 @@ def retrain_UNet(model, dataset, num_epochs=5):
             train_loss += loss.item()
 
             # Calculate training accuracy
-            predicted = (outputs > 0.5).type(torch.float)
+            predicted = outputs > 0.5  # Assuming binary classification
             correct_train += (predicted == targets).sum().item()
             total_train += targets.numel()
 
         train_accuracy = 100 * correct_train / total_train
-        print(f"Epoch [{epoch + 1}/{num_epochs}], Training Loss: {train_loss / len(train_dataloader)}, Training Accuracy: {train_accuracy}%")
+        print(f"Epoch [{epoch + 1}/{num_epochs}], Training Loss: {train_loss / len(train_dataloader)}, Training Accuracy: {train_accuracy}")
 
     print("Retraining complete")
     torch.save(model.state_dict(), 'model_state_dict.pth')
