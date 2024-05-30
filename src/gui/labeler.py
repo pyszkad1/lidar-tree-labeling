@@ -3,7 +3,7 @@ from src.gui.image_transformation import *
 from src.gui.HistoryQueue import *
 import numpy as np
 from PyQt5.QtWidgets import QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QGraphicsScene, \
-    QGraphicsView, QSpacerItem, QSizePolicy, QFileDialog, QDialog, QLabel, QComboBox
+    QGraphicsView, QSpacerItem, QSizePolicy, QFileDialog, QDialog, QLabel, QComboBox, QSlider
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QBrush, QMouseEvent
 from PyQt5.QtCore import Qt, QPoint, QRect, QRectF
 
@@ -12,15 +12,15 @@ DATA_HEIGHT = 128
 
 
 class DrawableGraphicsScene(QGraphicsScene):
-    def __init__(self, width, height, parent=None):
+    def __init__(self, width, height, real_height, parent=None):
         super(DrawableGraphicsScene, self).__init__(parent)
         self.image_width = width
-        self.image_width_height = height
+        self.image_height = real_height
         self.backgroundImage = QImage(width, height, QImage.Format_RGB32)
         self.backgroundImage.fill(Qt.transparent)
         self._background_image_numpy = np.zeros((height, width, 3), dtype=np.uint8)
 
-        self.maskImage = QImage(width, height, QImage.Format_RGBA8888)
+        self.maskImage = QImage(width, real_height, QImage.Format_RGBA8888)
         self.maskImage.fill(Qt.transparent)
         self._binary_mask = np.zeros((height, width), dtype=np.uint8)
 
@@ -31,7 +31,10 @@ class DrawableGraphicsScene(QGraphicsScene):
         self.lastPoint = QPoint()
         self.drawingMode = 'Draw'
 
-        self.penColor = Qt.yellow  # Default pen color for drawin
+        self.pen_size = 10
+        self.eraser_size = 10
+
+        self.pen_color = Qt.yellow  # Default pen color for drawin
         self.startPoint = QPoint()
         self.endPoint = QPoint()
         self.tempImage = None  # Temporary image for drawing shapes
@@ -45,7 +48,7 @@ class DrawableGraphicsScene(QGraphicsScene):
                 self.tempImage = self.maskImage.copy()  # Copy the current mask image
 
     @staticmethod
-    def makeRect(p1: QPoint, p2: QPoint):
+    def make_rect(p1: QPoint, p2: QPoint):
         top_left_x = min(p1.x(), p2.x())
         top_left_y = min(p1.y(), p2.y())
         bottom_right_x = max(p1.x(), p2.x())
@@ -59,23 +62,26 @@ class DrawableGraphicsScene(QGraphicsScene):
                 self.clear()
                 # Finalize drawing by updating the maskImage with the tempImage
                 painter = QPainter(self.maskImage)
-                painter.setBrush(QBrush(self.penColor))
+                painter.setBrush(QBrush(self.pen_color))
                 painter.setPen(Qt.NoPen)
                 rect = self.make_rect(self.startPoint.toPoint(), event.scenePos().toPoint())
                 painter.drawRect(rect)
                 painter.end()
                 self.tempImage = None
             if self.drawingMode == 'Smart Select':
+
+                if event.scenePos().x() > self.image_width or event.scenePos().y() > self.image_height:
+                    return
                 smart_select_mask = self.smart_select(int(event.scenePos().x()), int(event.scenePos().y()))
                 if smart_select_mask is not None:
                     self.update_mask_image(smart_select_mask)
 
             self._update_binary_mask_from_image()
-            self.saveMaskState() # Save the current mask state to the history queue
+            self.saveMaskState()  # Save the current mask state to the history queue
             self.update()
 
     def mouseMoveEvent(self, event):
-        #print(event.scenePos())
+        # print(event.scenePos())
         if event.buttons() & Qt.LeftButton and self.isDrawing:
             painter = QPainter(self.maskImage)
 
@@ -86,7 +92,7 @@ class DrawableGraphicsScene(QGraphicsScene):
                 self.addPixmap(tempPixmap)  # Add the unmodified mask image
 
                 painter = QPainter(tempPixmap)
-                painter.setPen(QPen(self.penColor, 2, Qt.SolidLine, Qt.SquareCap, Qt.BevelJoin))
+                painter.setPen(QPen(self.pen_color, 2, Qt.SolidLine, Qt.SquareCap, Qt.BevelJoin))
                 rect = QRectF(self.startPoint,
                               event.scenePos())  # Create a rectangle from the start point to the current mouse position
                 painter.drawRect(rect)
@@ -96,14 +102,14 @@ class DrawableGraphicsScene(QGraphicsScene):
             elif self.drawingMode == 'Erase':
                 print("I am erasing")
 
-                eraserSize = 10  # Adjust the eraser size as needed
-                painter.setPen(QPen(Qt.transparent, eraserSize, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+
+                painter.setPen(QPen(Qt.transparent, self.eraser_size, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
                 painter.setCompositionMode(QPainter.CompositionMode_Clear)
 
                 painter.drawLine(self.lastPoint, event.scenePos())
 
             else:
-                painter.setPen(QPen(self.penColor, 10, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+                painter.setPen(QPen(self.pen_color, self.pen_size, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
                 painter.drawLine(self.lastPoint, event.scenePos())
             self.lastPoint = event.scenePos()
             self.update()
@@ -134,7 +140,7 @@ class DrawableGraphicsScene(QGraphicsScene):
         """Check if two colors are similar based on a given tolerance."""
         return np.linalg.norm(color1 - color2) <= tolerance
 
-    def smart_select(self, x : int, y : int, tolerance=40):
+    def smart_select(self, x: int, y: int, tolerance=40):
         """Selects a contiguous region with similar colors around (x, y)."""
         height, width, _ = self._background_image_numpy.shape
         visited = np.zeros((height, width), dtype=bool)
@@ -166,7 +172,7 @@ class DrawableGraphicsScene(QGraphicsScene):
 
         return mask
 
-    def smart_select_2(self, x : int, y : int, tolerance=30):
+    def smart_select_2(self, x: int, y: int, tolerance=30):
         """Selects a contiguous region with similar colors around (x, y)."""
         height, width, _ = self._background_image_numpy.shape
         visited = np.zeros((height, width), dtype=bool)
@@ -197,7 +203,6 @@ class DrawableGraphicsScene(QGraphicsScene):
                      in [(-1, 0), (1, 0), (0, -1), (0, 1)]])
 
         return mask
-
 
     def update_mask_image(self, mask):
         painter = QPainter(self.maskImage)
@@ -236,7 +241,6 @@ class DrawableGraphicsScene(QGraphicsScene):
 
         print("Binary mask updated")
 
-
     def set_background_image_from_array(self, array: np.ndarray):
         # Ensure the array is in the correct 3D shape (height, width, channels)
 
@@ -257,32 +261,6 @@ class DrawableGraphicsScene(QGraphicsScene):
         self._background_image_numpy = resized_array
         self.update()
 
-
-
-class SizeSelectionDialog(QDialog):
-    def __init__(self, title="Select Size", default_size="10", parent=None):
-        super(SizeSelectionDialog, self).__init__(parent, Qt.WindowCloseButtonHint)
-        self.setWindowTitle(title)
-        self.layout = QVBoxLayout(self)
-        self.selected_size = int(default_size)  # Ensure this is always defined
-
-        # Create a label
-        self.label = QLabel("Select size:", self)
-        self.layout.addWidget(self.label)
-
-        # Create a combo box for selecting size
-        self.sizeComboBox = QComboBox(self)
-        self.sizeComboBox.addItems(["1", "5", "10", "20"])  # Adding predefined sizes as strings
-        self.sizeComboBox.setCurrentText(default_size)  # Set default size
-        self.layout.addWidget(self.sizeComboBox)
-
-        # Connect selection change to a method
-        self.sizeComboBox.currentIndexChanged.connect(self.on_size_selected)
-
-    def on_size_selected(self, index):
-        # Directly extract and apply the selected size
-        self.selected_size = int(self.sizeComboBox.currentText())
-        self.accept()
 
 class ZoomableGraphicsView(QGraphicsView):
     def __init__(self, scene, parent=None):
@@ -322,7 +300,7 @@ class ZoomableGraphicsView(QGraphicsView):
             self.panning = True
             self.last_mouse_position = event.pos()
             self.setCursor(Qt.ClosedHandCursor)
-            self.setDragMode(QGraphicsView.ScrollHandDrag)  # Optional: for built-in hand-drag functionality
+            self.setDragMode(QGraphicsView.ScrollHandDrag)
         else:
             super().mousePressEvent(event)
 
@@ -332,7 +310,7 @@ class ZoomableGraphicsView(QGraphicsView):
             delta = event.pos() - self.last_mouse_position
             self.last_mouse_position = event.pos()
 
-            adjusted_delta = delta / self.current_scale * 1.2  # Adjust the delta based on the current scale
+            adjusted_delta = delta / min(self.current_scale,2) * 1.55  # Adjust the delta based on the current scale
 
             # Update the scrollbars
             self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - adjusted_delta.x())
@@ -349,6 +327,7 @@ class ZoomableGraphicsView(QGraphicsView):
             self.setDragMode(QGraphicsView.NoDrag)  # Optional: for built-in hand-drag functionality
         else:
             super().mouseReleaseEvent(event)
+
 
 class Labeler(QWidget):
     def get_drawn_mask(self) -> QPixmap:
@@ -368,33 +347,69 @@ class Labeler(QWidget):
         self.image_height = height
 
         # Main layout for the widget
-        self.main_layout = QVBoxLayout(self)
+        self.layout = QVBoxLayout(self)
 
         # Create the canvas
-        self.scene = DrawableGraphicsScene(self.image_width, self.image_height)
+        self.scene = DrawableGraphicsScene(self.image_width, self.image_height * 4, self.image_height)
         self.view = ZoomableGraphicsView(self.scene)
         self.view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.view.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.view.setFixedSize(self.image_width, self.image_height)  # Canvas size
-        self.scene.setSceneRect(0, 0, self.image_width, self.image_height)  # Set the scene size to match the view
-        self.main_layout.addWidget(self.view)
+        self.view.setFixedSize(self.image_width, self.image_height * 4)  # Canvas size
+        self.scene.setSceneRect(0, 0, self.image_width, self.image_height *4)  # Set the scene size to match the view
+        self.layout.addSpacerItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        self.layout.addWidget(self.view)
 
         # Create a layout for buttons
         self.buttons_layout = QHBoxLayout()
 
         # Create buttons
 
-        self.button_rectangle = QPushButton("Rectangle")
+        self.button_rectangle = QPushButton("Rectangle Select")
+        self.button_smart_select = QPushButton("Smart Select")
+
+        slider_width = 100
+        slider_height = 20
+
+        self.draw_layout = QVBoxLayout()
+        self.draw_slider = QSlider(Qt.Horizontal)
+        self.draw_slider.setMinimum(1)
+        self.draw_slider.setMaximum(20)
+        self.draw_slider.setValue(10)  # Default size for drawing
+        self.draw_slider.setFixedSize(slider_width, slider_height)
+        self.draw_slider.valueChanged.connect(lambda: self.set_size(self.draw_slider.value(), 'draw'))
+
+        self.draw_button_pane = QWidget()
+
+        self.draw_button_pane.setLayout(self.draw_layout)
 
         self.button_draw = QPushButton("Draw")
-        self.button_draw.clicked.connect(lambda: self.open_size_selection_dialog("Select Brush Size", self.button_draw))
-        self.buttons_layout.addWidget(self.button_draw)
+
+        self.draw_layout.addWidget(self.button_draw)
+        label = QLabel("Pen Size:")
+        self.draw_layout.addWidget(label)
+        self.draw_layout.addWidget(self.draw_slider)
+        self.draw_button_pane.setMaximumWidth(100)
+        self.draw_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Set up the slider and button for erasing
+        self.erase_layout = QVBoxLayout()
+        self.erase_button_pane = QWidget()
+        self.erase_button_pane.setLayout(self.erase_layout)
+        self.erase_button_pane.setMaximumWidth(100)
+        self.erase_layout.setContentsMargins(0, 0, 0, 0)
+        self.erase_slider = QSlider(Qt.Horizontal)
+        self.erase_slider.setMinimum(1)
+        self.erase_slider.setMaximum(20)
+        self.erase_slider.setValue(10)  # Default size for erasing
+        self.erase_slider.setFixedSize(slider_width, slider_height)
+        self.erase_slider.valueChanged.connect(lambda: self.set_size(self.erase_slider.value(), 'erase'))
 
         self.button_erase = QPushButton("Erase")
-        self.button_erase.clicked.connect(lambda: self.open_size_selection_dialog("Select Eraser Size", self.button_erase))
-        self.buttons_layout.addWidget(self.button_erase)
 
-        self.button_smart_select = QPushButton("Smart Select")
+        self.erase_layout.addWidget(self.button_erase)
+        self.erase_layout.addWidget(QLabel("Eraser Size:"))
+        self.erase_layout.addWidget(self.erase_slider)
+        self.layout.addLayout(self.erase_layout)
 
         # Make buttons square
         button_size = 100  # Define a fixed size for buttons
@@ -406,11 +421,15 @@ class Labeler(QWidget):
 
         # Add buttons to the layout with spacers
 
-        self.buttons_layout.addWidget(self.button_rectangle)
-        self.buttons_layout.addWidget(self.button_draw)
-        self.buttons_layout.addWidget(self.button_erase)
-        self.buttons_layout.addWidget(self.button_smart_select)
+        self.buttons_layout.addWidget(self.draw_button_pane, alignment=Qt.AlignTop)
+        self.buttons_layout.addWidget(self.button_rectangle, alignment=Qt.AlignTop)
+        self.buttons_layout.addWidget(self.erase_button_pane, alignment=Qt.AlignTop)
+        self.buttons_layout.addWidget(self.button_smart_select, alignment=Qt.AlignTop)
         self.buttons_layout.addSpacerItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
+
+        widget = QWidget()
+        widget.setLayout(self.buttons_layout)
+        widget.setFixedHeight(200)
 
         self.button_rectangle.clicked.connect(self._set_rectangle_mode)
         self.button_draw.clicked.connect(self._set_draw_mode)
@@ -418,7 +437,8 @@ class Labeler(QWidget):
         self.button_smart_select.clicked.connect(self._set_smart_select_mode)
 
         # Add buttons layout to the main layout
-        self.main_layout.addLayout(self.buttons_layout)
+        self.layout.addWidget(widget)
+
         self._reset_button_styles()
         self._set_draw_mode()
 
@@ -437,13 +457,13 @@ class Labeler(QWidget):
 
     def _set_rectangle_mode(self):
         self.scene.drawingMode = 'Rectangle'
-        self.scene.penColor = Qt.yellow
+        self.scene.pen_color = Qt.yellow
         self._reset_button_styles()
         self._set_active_button_style(self.button_rectangle)
 
     def _set_draw_mode(self):
         self.scene.drawingMode = 'Draw'
-        self.scene.penColor = Qt.yellow
+        self.scene.pen_color = Qt.yellow
         self._reset_button_styles()
         self._set_active_button_style(self.button_draw)
 
@@ -457,32 +477,15 @@ class Labeler(QWidget):
         self._reset_button_styles()
         self._set_active_button_style(self.button_smart_select)
 
-    def open_size_selection_dialog(self, title, button):
-        try:
-            button_pos = button.mapToGlobal(button.pos())
-            dialog = SizeSelectionDialog(title, "10", self)
-            dialog.move(button_pos + QPoint(0, button.height()))  # Position it below the button
-            if dialog.exec_() == QDialog.Accepted:
-                selected_size = dialog.get_selected_size()
-                if 'brush' in title.lower():
-                    self.set_brush_size(selected_size)
-                elif 'eraser' in title.lower():
-                    self.set_eraser_size(selected_size)
-        except Exception as e:
-            print(f"Error opening size selection dialog: {e}")
-
-    def set_brush_size(self, size):
-        print(f"Brush size set to: {size}")
-
-    def set_eraser_size(self, size):
-        print(f"Eraser size set to: {size}")
+    def set_size(self, size, tool_context):
+        if tool_context == 'draw':
+            self.scene.pen_size = size
+            self._set_draw_mode()
+        elif tool_context == 'erase':
+            self.scene.eraser_size = size
+            self._set_erase_mode()
 
     def get_mask_bits(self) -> np.ndarray:
         ptr = self.scene.maskImage.bits()
         ptr.setsize(self.scene.maskImage.byteCount())
         return np.array(ptr).reshape(self.scene.maskImage.height(), self.scene.maskImage.width(), 4)  # 4 for RGBA
-
-
-
-
-
