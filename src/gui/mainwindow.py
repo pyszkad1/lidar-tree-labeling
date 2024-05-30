@@ -11,26 +11,25 @@ from src.gui.labeler import Labeler
 
 
 class MainWindow(QMainWindow):
-
     def __init__(self):
         super().__init__()
 
         self.setWindowTitle("Labeler")
-        self.setGeometry(100, 100, 1500, 900)  # window size
+        self.setGeometry(100, 100, 1500, 900)
 
-        # Create a central widget
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
-        # Set the layout for the central widget
-        layout = QVBoxLayout(central_widget)  # Associate the layout with the central widget
+        main_layout = QVBoxLayout(central_widget)
 
-        self.top_pane = self._init_top_widget()
-        layout.addWidget(self.top_pane)
+        top_pane = self._init_top_widget()
+        main_layout.addWidget(top_pane)
 
         self.labeler = Labeler()
-        layout.addWidget(self.labeler)
 
+        main_layout.addWidget(self.labeler)
+
+        self.show()
 
     def _init_top_widget(self, ):
         top_pane = QWidget()
@@ -53,6 +52,8 @@ class MainWindow(QMainWindow):
 
         return top_pane
 
+
+
     def _prompt_for_file(self, namefilter="PCD Files (*.pcd)"):
         options = QFileDialog.Options()
         options |= QFileDialog.DontUseNativeDialog
@@ -72,8 +73,8 @@ class MainWindow(QMainWindow):
         if not filename:
             return
         try:
-            rgb_array = transform_file(filename)
-            self.labeler.set_background_image(rgb_array)
+            rgb_array, range_array = transform_file(filename)
+            self.labeler.set_background_image(rgb_array, range_array)
         except Exception as e:
             print("Error:", e)
 
@@ -100,6 +101,7 @@ class MainWindow(QMainWindow):
             # Combine backgroundImage and maskImage
             mask_map = self.labeler.get_drawn_mask()
             background_image = self.labeler.get_image_qpixmap()
+            range_array = self.labeler.get_range_array()
 
             combined_image = self.combine_images(background_image, mask_map)
 
@@ -114,11 +116,20 @@ class MainWindow(QMainWindow):
             np.save(binary_mask_filename, binary_mask)
             print("Binary mask saved successfully:", binary_mask_filename)
 
+            # Save range array
+            range_array_filename = f"{base_filename}.npy"
+            np.save(range_array_filename, range_array)
+            print("Range array saved successfully:", range_array_filename)
+
         except Exception as e:
             print("Failed to save files:", e)
 
     def _prompt_for_save_name(self):
         options = QFileDialog.Options()
+        file_dialog = QFileDialog()
+        file_dialog.setDirectory(r"C:\Users\Adam\Desktop\school\Bc_projekt\labeling\data\labeled")
+
+
         filename, _ = QFileDialog.getSaveFileName(self, "Save Files", "",
                                                   "All Files (*)", options=options)
         return filename
@@ -147,3 +158,7 @@ class MainWindow(QMainWindow):
             self.labeler.scene.undoMaskState()
         if event.key() == Qt.Key_Y and (event.modifiers() & Qt.ControlModifier):
             self.labeler.scene.redoMaskState()
+
+
+
+

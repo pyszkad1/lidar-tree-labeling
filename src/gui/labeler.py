@@ -1,6 +1,7 @@
 import os
 from src.gui.image_transformation import *
 from src.gui.HistoryQueue import *
+from src.gui.NNControls import *
 import numpy as np
 from PyQt5.QtWidgets import QMainWindow, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QGraphicsScene, \
     QGraphicsView, QSpacerItem, QSizePolicy, QFileDialog, QDialog, QLabel, QComboBox, QSlider
@@ -19,6 +20,7 @@ class DrawableGraphicsScene(QGraphicsScene):
         self.backgroundImage = QImage(width, height, QImage.Format_RGB32)
         self.backgroundImage.fill(Qt.transparent)
         self._background_image_numpy = np.zeros((height, width, 3), dtype=np.uint8)
+        self._range_array = np.zeros((real_height, width), dtype=np.uint8)
 
         self.maskImage = QImage(width, real_height, QImage.Format_RGBA8888)
         self.maskImage.fill(Qt.transparent)
@@ -81,7 +83,6 @@ class DrawableGraphicsScene(QGraphicsScene):
             self.update()
 
     def mouseMoveEvent(self, event):
-        # print(event.scenePos())
         if event.buttons() & Qt.LeftButton and self.isDrawing:
             painter = QPainter(self.maskImage)
 
@@ -100,17 +101,16 @@ class DrawableGraphicsScene(QGraphicsScene):
 
                 self.addPixmap(tempPixmap)
             elif self.drawingMode == 'Erase':
-                print("I am erasing")
-
-
                 painter.setPen(QPen(Qt.transparent, self.eraser_size, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
                 painter.setCompositionMode(QPainter.CompositionMode_Clear)
 
                 painter.drawLine(self.lastPoint, event.scenePos())
 
-            else:
+            elif self.drawingMode == 'Draw':
                 painter.setPen(QPen(self.pen_color, self.pen_size, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
                 painter.drawLine(self.lastPoint, event.scenePos())
+            elif self.drawingMode == 'Smart Select':
+                pass
             self.lastPoint = event.scenePos()
             self.update()
             del painter
@@ -294,8 +294,6 @@ class ZoomableGraphicsView(QGraphicsView):
                 self.scale(1 / self.scale_factor, 1 / self.scale_factor)
 
     def mousePressEvent(self, event: QMouseEvent):
-        # print("Horizontal ScrollBar Range:", self.horizontalScrollBar().minimum(), self.horizontalScrollBar().maximum())
-        # print("Vertical ScrollBar Range:", self.verticalScrollBar().minimum(), self.verticalScrollBar().maximum())
         if event.button() == Qt.RightButton:
             self.panning = True
             self.last_mouse_position = event.pos()
@@ -333,12 +331,16 @@ class Labeler(QWidget):
     def get_drawn_mask(self) -> QPixmap:
         return QPixmap.fromImage(self.scene.maskImage)
 
-    def set_background_image(self, array: np.ndarray) -> None:
+    def set_background_image(self, rgb_array: np.ndarray, range_array: np.ndarray) -> None:
         # self.adjustCanvasSize(array.shape[1], array.shape[0])
-        self.scene.set_background_image_from_array(array)
+        self.scene.set_background_image_from_array(rgb_array)
+        self.scene._range_array = range_array
 
     def get_image_qpixmap(self) -> QPixmap:
         return QPixmap.fromImage(self.scene.backgroundImage)
+
+    def get_range_array(self) -> np.ndarray:
+        return self.scene._range_array
 
     def __init__(self, width: int = DATA_WIDTH, height: int = DATA_HEIGHT):
         super().__init__()
@@ -346,8 +348,13 @@ class Labeler(QWidget):
         self.image_width = width
         self.image_height = height
 
+        self.NN_controller = NNControls()
+
         # Main layout for the widget
         self.layout = QVBoxLayout(self)
+
+        self.middle_widget = QWidget()
+        self.middle_widget.setLayout(QHBoxLayout())
 
         # Create the canvas
         self.scene = DrawableGraphicsScene(self.image_width, self.image_height * 4, self.image_height)
@@ -357,15 +364,21 @@ class Labeler(QWidget):
         self.view.setFixedSize(self.image_width, self.image_height * 4)  # Canvas size
         self.scene.setSceneRect(0, 0, self.image_width, self.image_height *4)  # Set the scene size to match the view
         self.layout.addSpacerItem(QSpacerItem(40, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
-        self.layout.addWidget(self.view)
+
+        self.right_widget = self._init_right_widget()
+
+        self.middle_widget.layout().addWidget(self.view)
+        self.middle_widget.layout().addWidget(self.right_widget, alignment=Qt.AlignVCenter)
+
+        self.layout.addWidget(self.middle_widget)
 
         # Create a layout for buttons
         self.buttons_layout = QHBoxLayout()
 
         # Create buttons
 
-        self.button_rectangle = QPushButton("Rectangle Select")
-        self.button_smart_select = QPushButton("Smart Select")
+        self.button_rectangle = QPushButton("Rectangle\nSelect")
+        self.button_smart_select = QPushButton("Smart\nSelect")
 
         slider_width = 100
         slider_height = 20
@@ -489,3 +502,43 @@ class Labeler(QWidget):
         ptr = self.scene.maskImage.bits()
         ptr.setsize(self.scene.maskImage.byteCount())
         return np.array(ptr).reshape(self.scene.maskImage.height(), self.scene.maskImage.width(), 4)  # 4 for RGBA
+
+    def _init_right_widget(self):
+        default_style = "QPushButton { background-color: None; }"
+        button_size = 100
+
+        right_widget = QWidget()
+        right_pane_layout = QVBoxLayout()
+        learn_button = QPushButton("Learn")
+        learn_button.clicked.connect(self.NN_controller.learn_UNet)
+        learn_button.setStyleSheet(default_style)
+        learn_button.setFixedSize(button_size, button_size)
+
+        predict_mask_button = QPushButton("\nPredict\nMask")
+        predict_mask_button.setStyleSheet(default_style)
+        predict_mask_button.clicked.connect(lambda: self.NN_controller.test_UNet(self.scene._range_array))
+        predict_mask_button.setFixedSize(button_size, button_size)
+
+        use_mask_button = QPushButton("Use\nPredicted\nMask")
+        use_mask_button.clicked.connect(self._use_predicted_mask)
+        use_mask_button.setStyleSheet(default_style)
+        use_mask_button.setFixedSize(button_size, button_size)
+
+
+
+        # Add spacer to push buttons to the right
+        right_pane_layout.addSpacerItem(QSpacerItem(20, 20, QSizePolicy.Minimum, QSizePolicy.Minimum))
+
+        right_pane_layout.addWidget(learn_button, alignment=Qt.AlignRight)
+        right_pane_layout.addWidget(predict_mask_button,alignment=Qt.AlignRight)
+        right_pane_layout.addWidget(use_mask_button,alignment=Qt.AlignRight)
+
+        right_widget.setLayout(right_pane_layout)
+        return right_widget
+
+
+    def _use_predicted_mask(self):
+        mask = self.NN_controller.current_predictions
+        self.scene.set_mask_image(mask)
+
+
