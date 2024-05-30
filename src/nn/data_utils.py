@@ -127,48 +127,79 @@ def jaccard_index(true_mask, pred_mask):
         return 1.0 if intersection.sum() == 0 else 0.0
     return intersection.sum() / union.sum()
 
+def precision_score(true_mask, pred_mask):
+    true_mask = np.asarray(true_mask, dtype=bool)
+    pred_mask = np.asarray(pred_mask, dtype=bool)
+    true_positive = np.logical_and(true_mask, pred_mask).sum()
+    predicted_positive = pred_mask.sum()
+    if predicted_positive == 0:
+        return 1.0 if true_positive == 0 else 0.0
+    return true_positive / predicted_positive
 
-def compute_jaccard_for_directory(pred_dir, true_dir):
-    # Get list of predicted mask files
+def accuracy_score(true_mask, pred_mask):
+    true_mask = np.asarray(true_mask, dtype=bool)
+    pred_mask = np.asarray(pred_mask, dtype=bool)
+    correct_predictions = np.equal(true_mask, pred_mask).sum()
+    total_elements = true_mask.size
+    return correct_predictions / total_elements
+
+
+def compute_metrics_for_directory(pred_dir, true_dir):
     pred_files = [f for f in os.listdir(pred_dir) if f.endswith('.bin.npy')]
-
-    # Initialize an empty dictionary to store Jaccard Index results
     jaccard_scores = {}
+    precision_scores = {}
+    accuracy_scores = {}
 
-    # Loop through each predicted mask file
     for pred_file in pred_files:
         pred_mask_path = os.path.join(pred_dir, pred_file)
         true_mask_path = os.path.join(true_dir, pred_file)
 
-        # Check if the corresponding true mask file exists
         if os.path.exists(true_mask_path):
-            # Load both masks
             pred_mask = np.load(pred_mask_path)
             true_mask = np.load(true_mask_path)
 
-            # Compute the Jaccard Index
-            score = jaccard_index(true_mask, pred_mask)
+            jaccard = jaccard_index(true_mask, pred_mask)
+            precision = precision_score(true_mask, pred_mask)
+            accuracy = accuracy_score(true_mask, pred_mask)
 
-            # Store the score with the file name as key
-            jaccard_scores[pred_file] = score
+            jaccard_scores[pred_file] = jaccard
+            precision_scores[pred_file] = precision
+            accuracy_scores[pred_file] = accuracy
         else:
             print(f"No corresponding true mask found for {pred_file}")
 
-    return jaccard_scores
+    # Calculate averages
+    avg_jaccard = np.mean(list(jaccard_scores.values())) if jaccard_scores else 0
+    avg_precision = np.mean(list(precision_scores.values())) if precision_scores else 0
+    avg_accuracy = np.mean(list(accuracy_scores.values())) if accuracy_scores else 0
 
+    return jaccard_scores, precision_scores, accuracy_scores, avg_jaccard, avg_precision, avg_accuracy
 
 
 if __name__ == '__main__':
-    # Rename files starting from 100 in the 'data' directory
     script_dir = os.path.dirname(os.path.abspath(__file__))  # Gets the directory of the current script
     project_dir = os.path.dirname(os.path.dirname(script_dir))
-    target_directory = os.path.join(project_dir, 'data', 'true_labels')
+    pred_directory = os.path.join(project_dir, 'data', 'pred1')
+    true_directory = os.path.join(project_dir, 'data', 'true_labels')
 
-    source_dir = target_directory
-    target_dirs = [os.path.join(project_dir, 'data', 'train1'),
-                   os.path.join(project_dir, 'data', 'train2'),
-                   os.path.join(project_dir, 'data', 'train3'),
-                   os.path.join(project_dir, 'data', 'train4'),
-                   os.path.join(project_dir, 'data', 'test')]
+    jaccard_scores, precision_scores, accuracy_scores, avg_jaccard, avg_precision, avg_accuracy = compute_metrics_for_directory(pred_directory, true_directory)
 
-    distribute_files(source_dir, target_dirs)
+    # Determine the file with the best Jaccard score
+    best_jaccard_file = max(jaccard_scores, key=jaccard_scores.get)
+    best_jaccard_score = jaccard_scores[best_jaccard_file]
+
+    # Prepare the results text
+    results_text = f"Jaccard Score: {avg_jaccard}\n"
+    results_text += f"Best Jaccard Score: {best_jaccard_score} in file {best_jaccard_file}\n"
+    results_text += f"Precision Score: {avg_precision}\n"
+    results_text += f"Accuracy Score: {avg_accuracy}\n"
+
+    # Write the results to a file in the prediction directory
+    results_file_path = os.path.join(pred_directory, 'results.txt')
+    with open(results_file_path, 'w') as results_file:
+        results_file.write(results_text)
+
+    print(f"Results written to {results_file_path}")
+
+
+
