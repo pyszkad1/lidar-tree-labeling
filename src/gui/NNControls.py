@@ -17,7 +17,11 @@ class NNControls:
             model = UNet(1, 1)
             model.load_state_dict(torch.load('model_state_dict.pth'))
 
-            new_dataset = TrunkDataset(exclude_oldest=self.last_amount_of_pictures)
+            script_dir = os.path.dirname(os.path.abspath(__file__))  # Gets the directory of the current script
+            project_dir = os.path.dirname(os.path.dirname(script_dir))  # Move up two levels to get to the project root
+            target_directory = os.path.join(project_dir, 'data', 'true_labels')
+
+            new_dataset = TrunkDataset(target_directory, exclude_oldest=self.last_amount_of_pictures)
             self.last_amount_of_pictures = len(new_dataset) + self.last_amount_of_pictures
 
             print("Retraining model...")

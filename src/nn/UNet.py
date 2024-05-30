@@ -100,7 +100,7 @@ def retrain_UNet(model, dataset, num_epochs=5):
     train_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     criterion = nn.BCEWithLogitsLoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.0001)
+    optimizer = optim.Adam(model.parameters(), lr=0.0005)
 
     for epoch in range(num_epochs):
         # Training phase with accuracy calculation

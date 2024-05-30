@@ -176,7 +176,7 @@ class DrawableGraphicsScene(QGraphicsScene):
 
         return mask
 
-    def update_mask_image(self, mask):
+    def update_mask_image(self, mask: np.ndarray):
         painter = QPainter(self.maskImage)
         painter.setPen(QPen(Qt.yellow, 1))  # Set the pen color and size
         painter.setBrush(QBrush(Qt.yellow))  # Set the brush color
