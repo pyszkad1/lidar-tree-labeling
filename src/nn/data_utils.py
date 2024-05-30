@@ -179,7 +179,7 @@ def compute_metrics_for_directory(pred_dir, true_dir):
 if __name__ == '__main__':
     script_dir = os.path.dirname(os.path.abspath(__file__))  # Gets the directory of the current script
     project_dir = os.path.dirname(os.path.dirname(script_dir))
-    pred_directory = os.path.join(project_dir, 'data', 'pred1')
+    pred_directory = os.path.join(project_dir, 'data', 'pred4_25e')
     true_directory = os.path.join(project_dir, 'data', 'true_labels')
 
     jaccard_scores, precision_scores, accuracy_scores, avg_jaccard, avg_precision, avg_accuracy = compute_metrics_for_directory(pred_directory, true_directory)

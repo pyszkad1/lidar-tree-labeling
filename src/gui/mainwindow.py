@@ -73,7 +73,7 @@ class MainWindow(QMainWindow):
         file_dialog = QFileDialog()
         script_dir = os.path.dirname(os.path.abspath(__file__))
         project_dir = os.path.dirname(os.path.dirname(script_dir))
-        target_directory = os.path.join(project_dir, 'data', 'true_labels')
+        target_directory = os.path.join(project_dir, 'data') #TODO add labelled
         file_dialog.setDirectory(target_directory)
         filename, _ = file_dialog.getSaveFileName(self, "Save Files", "", "All Files (*)", options=options)
         if not os.path.exists(target_directory):
@@ -84,7 +84,7 @@ class MainWindow(QMainWindow):
     def open_image(self):
         script_dir = os.path.dirname(os.path.abspath(__file__))
         project_dir = os.path.dirname(os.path.dirname(script_dir))
-        target_directory = os.path.join(project_dir, 'data', 'pcd_data')
+        target_directory = os.path.join(project_dir, 'data', 'test')
         filename = self._prompt_for_file(target_directory)
         if not filename:
             return

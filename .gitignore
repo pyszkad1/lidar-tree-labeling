@@ -7,10 +7,12 @@ __pycache__/
 
 venv/
 
-data/test
 data/train1
 data/train2
 data/train3
 data/train4
 data/pred1
-
+data/pred2
+data/pred3
+data/pred4
+data/pred4_25e

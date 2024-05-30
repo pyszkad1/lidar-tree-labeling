@@ -14,7 +14,7 @@ class NNControls:
         print('Learning UNet')
         script_dir = os.path.dirname(os.path.abspath(__file__))  # Gets the directory of the current script
         project_dir = os.path.dirname(os.path.dirname(script_dir))  # Move up two levels to get to the project root
-        target_directory = os.path.join(project_dir, 'data', 'train1')
+        target_directory = os.path.join(project_dir, 'data', 'train4')
 
         if os.path.exists('model_state_dict.pth'):
             print("Model found. Loading model...")
@@ -25,7 +25,7 @@ class NNControls:
             self.last_amount_of_pictures = len(new_dataset) + self.last_amount_of_pictures
 
             print("Retraining model...")
-            retrain_UNet(model, new_dataset, 10)
+            retrain_UNet(model, new_dataset, 15)
             self.model = model
             print("Model retrained")
 
