@@ -23,6 +23,10 @@ This tool is designed for annotating PCD (Point Cloud Data) to create training d
 
 ## Data Examples
 
+### Non-segmented Example
+
+![Non-segmented](data/images_for_text/shifted.png)
+
 ### Segmented Example
 
 ![Segmented](data/labeled/example.png)
