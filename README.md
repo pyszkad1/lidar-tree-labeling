@@ -27,13 +27,9 @@ This tool is designed for annotating PCD (Point Cloud Data) to create training d
 
 ![Non-segmented](data/images_for_text/shifted.png)
 
-### Segmented Example
-
-![Segmented](data/labeled/example.png)
-
 ### Neural Network Segmentation Example
 
-![NN Segmented](data/labeled/05.png)
+![Segmented](data/labeled/example.png)
 
 *Example of a tree labeled using the neural network tools.*
 
